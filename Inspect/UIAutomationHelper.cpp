@@ -61,9 +61,61 @@ private:
 };
 
 CMsgQueue g_MsgQueue;
+std::mutex g_mutexSendMsg;
+std::condition_variable g_cvSendMsg; // 等待消息处理完成
+bool g_bWaitSendMsg = false;
+LRESULT g_lr = 0;	// SendMsg返回值
+
+LRESULT SendMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	MSG msg;
+	msg.message = uMsg;
+	msg.wParam = wParam;
+	msg.lParam = lParam;
+
+	g_MsgQueue.Put(msg);
+
+	std::unique_lock<std::mutex> locker(g_mutexSendMsg);
+	g_bWaitSendMsg = false;
+	g_cvSendMsg.wait(locker, [] {return g_bWaitSendMsg; });
+
+	return g_lr;
+}
+
+LRESULT PostMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+	MSG msg;
+	msg.message = uMsg;
+	msg.wParam = wParam;
+	msg.lParam = lParam;
+
+	g_MsgQueue.Put(msg);
+
+	return 0;
+}
+
+BOOL GetMsg(__out LPMSG lpMsg, WNDPROC fnMsgHandler)
+{
+	MSG msg;
+	g_MsgQueue.Take(msg);
+
+	*lpMsg = msg;
+
+	g_lr = fnMsgHandler(nullptr, msg.message, msg.wParam, msg.lParam);
+
+	// 当hwnd有值时，模拟同步消息，没有值时，模拟异步消息
+	g_bWaitSendMsg = true;
+	g_cvSendMsg.notify_one();
+
+	if (lpMsg->message == WM_QUIT)
+	{
+		return FALSE;
+	}
+
+	return TRUE;
+}
 
 // UIA_ButtonControlTypeId
-
 // <div>aaa</div>: UIA_TextControlTypeId
 // <img id="IDC_IMG_EMPTY" alt="" class="empty-pic">: UIA_PaneControlTypeId
 HRESULT InvokeButton(IUIAutomationElement* pButtonElement)
@@ -324,89 +376,89 @@ int CUIAutomationHelper::CreateElementProp(IUIAutomationElement* pElement, CUIEl
 			break;
 		}
 
-		CONTROLTYPEID eType;
-		pElement->get_CurrentControlType(&eType);
-		if (eType == UIA_GroupControlTypeId)
-		{
-			int n = 0;
-		}
+		//CONTROLTYPEID eType;
+		//pElement->get_CurrentControlType(&eType);
+		//if (eType == UIA_GroupControlTypeId)
+		//{
+		//	int n = 0;
+		//}
 
-		BSTR bstrAutomationId;
-		hr = pElement->get_CurrentAutomationId(&bstrAutomationId);
-		if (FAILED(hr))
-		{
-			nRet = UIAE_GET_NAME;
-			break;
-		}
+		//BSTR bstrAutomationId;
+		//hr = pElement->get_CurrentAutomationId(&bstrAutomationId);
+		//if (FAILED(hr))
+		//{
+		//	nRet = UIAE_GET_NAME;
+		//	break;
+		//}
 
-		BSTR bstrItemType;
-		hr = pElement->get_CurrentItemType(&bstrItemType);
-		if (FAILED(hr))
-		{
-			nRet = UIAE_GET_NAME;
-			break;
-		}
+		//BSTR bstrItemType;
+		//hr = pElement->get_CurrentItemType(&bstrItemType);
+		//if (FAILED(hr))
+		//{
+		//	nRet = UIAE_GET_NAME;
+		//	break;
+		//}
 
-		BSTR bstrFrameworkId;
-		hr = pElement->get_CurrentFrameworkId(&bstrFrameworkId);
-		if (FAILED(hr))
-		{
-			nRet = UIAE_GET_NAME;
-			break;
-		}
+		//BSTR bstrFrameworkId;
+		//hr = pElement->get_CurrentFrameworkId(&bstrFrameworkId);
+		//if (FAILED(hr))
+		//{
+		//	nRet = UIAE_GET_NAME;
+		//	break;
+		//}
 
-		BSTR bstrItemStatus;
-		hr = pElement->get_CurrentItemStatus(&bstrItemStatus);
-		if (FAILED(hr))
-		{
-			nRet = UIAE_GET_NAME;
-			break;
-		}
+		//BSTR bstrItemStatus;
+		//hr = pElement->get_CurrentItemStatus(&bstrItemStatus);
+		//if (FAILED(hr))
+		//{
+		//	nRet = UIAE_GET_NAME;
+		//	break;
+		//}
 
-		BSTR bstrAriaProperties;
-		hr = pElement->get_CurrentAriaProperties(&bstrAriaProperties);
-		if (FAILED(hr))
-		{
-			nRet = UIAE_GET_NAME;
-			break;
-		}
+		//BSTR bstrAriaProperties;
+		//hr = pElement->get_CurrentAriaProperties(&bstrAriaProperties);
+		//if (FAILED(hr))
+		//{
+		//	nRet = UIAE_GET_NAME;
+		//	break;
+		//}
 
-		BSTR bstrProviderDescription;
-		hr = pElement->get_CurrentProviderDescription(&bstrProviderDescription);
-		if (FAILED(hr))
-		{
-			nRet = UIAE_GET_NAME;
-			break;
-		}
+		//BSTR bstrProviderDescription;
+		//hr = pElement->get_CurrentProviderDescription(&bstrProviderDescription);
+		//if (FAILED(hr))
+		//{
+		//	nRet = UIAE_GET_NAME;
+		//	break;
+		//}
 
-		BSTR bstrClassName;
-		hr = pElement->get_CurrentClassName(&bstrClassName);
-		if (FAILED(hr))
-		{
-			nRet = UIAE_GET_CLASS_NAME;
-			break;
-		}
+		//BSTR bstrClassName;
+		//hr = pElement->get_CurrentClassName(&bstrClassName);
+		//if (FAILED(hr))
+		//{
+		//	nRet = UIAE_GET_CLASS_NAME;
+		//	break;
+		//}
 
-		BSTR bstrHelpText;
-		hr = pElement->get_CurrentHelpText(&bstrHelpText);
-		if (FAILED(hr))
-		{
-			nRet = UIAE_GET_CLASS_NAME;
-			break;
-		}
+		//BSTR bstrHelpText;
+		//hr = pElement->get_CurrentHelpText(&bstrHelpText);
+		//if (FAILED(hr))
+		//{
+		//	nRet = UIAE_GET_CLASS_NAME;
+		//	break;
+		//}
 
 		*ppElement = new CUIElement;
 		(*ppElement)->m_pBindElement = pElement;
 
 		(*ppElement)->m_strName = bstrName == nullptr ? L"" : bstrName;
 		(*ppElement)->m_strLocalizedControlType = bstrLocalizedControlType == nullptr ? L"" : bstrLocalizedControlType;
-		(*ppElement)->m_strAutomationId = bstrAutomationId == nullptr ? L"" : bstrAutomationId;
-		(*ppElement)->m_ControlType = eType;
-		(*ppElement)->m_strFrameworkId = bstrFrameworkId == nullptr ? L"" : bstrFrameworkId;
-		(*ppElement)->m_strItemType = bstrItemType == nullptr ? L"" : bstrItemType;
-		(*ppElement)->m_strItemStatus = bstrItemStatus == nullptr ? L"" : bstrItemStatus;
-		(*ppElement)->m_strClassName = bstrClassName == nullptr ? L"" : bstrClassName;
-		(*ppElement)->m_strHelpText = bstrHelpText == nullptr ? L"" : bstrHelpText;
+		//(*ppElement)->m_strAutomationId = bstrAutomationId == nullptr ? L"" : bstrAutomationId;
+		//(*ppElement)->m_ControlType = eType;
+		//(*ppElement)->m_strFrameworkId = bstrFrameworkId == nullptr ? L"" : bstrFrameworkId;
+		//(*ppElement)->m_strItemType = bstrItemType == nullptr ? L"" : bstrItemType;
+		//(*ppElement)->m_strItemStatus = bstrItemStatus == nullptr ? L"" : bstrItemStatus;
+		//(*ppElement)->m_strClassName = bstrClassName == nullptr ? L"" : bstrClassName;
+		//(*ppElement)->m_strHelpText = bstrHelpText == nullptr ? L"" : bstrHelpText;
 
 	} while (false);
 
@@ -441,4 +493,103 @@ checkNext:
 	}
 
 	return nullptr;
+}
+
+int CUIElement::InitProp()
+{
+	HRESULT hr = S_OK;
+	int nRet = 0;
+
+	do
+	{
+		if (nullptr == m_pBindElement)
+		{
+			nRet = UIAE_INVALID_PARAM;
+			break;
+		}
+
+		CONTROLTYPEID eType;
+		m_pBindElement->get_CurrentControlType(&eType);
+		if (eType == UIA_GroupControlTypeId)
+		{
+			int n = 0;
+		}
+
+		BSTR bstrAutomationId;
+		hr = m_pBindElement->get_CurrentAutomationId(&bstrAutomationId);
+		if (FAILED(hr))
+		{
+			nRet = UIAE_GET_NAME;
+			break;
+		}
+
+		BSTR bstrItemType;
+		hr = m_pBindElement->get_CurrentItemType(&bstrItemType);
+		if (FAILED(hr))
+		{
+			nRet = UIAE_GET_NAME;
+			break;
+		}
+
+		BSTR bstrFrameworkId;
+		hr = m_pBindElement->get_CurrentFrameworkId(&bstrFrameworkId);
+		if (FAILED(hr))
+		{
+			nRet = UIAE_GET_NAME;
+			break;
+		}
+
+		BSTR bstrItemStatus;
+		hr = m_pBindElement->get_CurrentItemStatus(&bstrItemStatus);
+		if (FAILED(hr))
+		{
+			nRet = UIAE_GET_NAME;
+			break;
+		}
+
+		BSTR bstrAriaProperties;
+		hr = m_pBindElement->get_CurrentAriaProperties(&bstrAriaProperties);
+		if (FAILED(hr))
+		{
+			nRet = UIAE_GET_NAME;
+			break;
+		}
+
+		BSTR bstrProviderDescription;
+		hr = m_pBindElement->get_CurrentProviderDescription(&bstrProviderDescription);
+		if (FAILED(hr))
+		{
+			nRet = UIAE_GET_NAME;
+			break;
+		}
+
+		BSTR bstrClassName;
+		hr = m_pBindElement->get_CurrentClassName(&bstrClassName);
+		if (FAILED(hr))
+		{
+			nRet = UIAE_GET_CLASS_NAME;
+			break;
+		}
+
+		BSTR bstrHelpText;
+		hr = m_pBindElement->get_CurrentHelpText(&bstrHelpText);
+		if (FAILED(hr))
+		{
+			nRet = UIAE_GET_CLASS_NAME;
+			break;
+		}
+
+		m_strAutomationId = bstrAutomationId == nullptr ? L"" : bstrAutomationId;
+		m_ControlType = eType;
+		m_strFrameworkId = bstrFrameworkId == nullptr ? L"" : bstrFrameworkId;
+		m_strItemType = bstrItemType == nullptr ? L"" : bstrItemType;
+		m_strItemStatus = bstrItemStatus == nullptr ? L"" : bstrItemStatus;
+		m_strClassName = bstrClassName == nullptr ? L"" : bstrClassName;
+		m_strHelpText = bstrHelpText == nullptr ? L"" : bstrHelpText;
+
+		m_bInitProp = TRUE;
+
+	} while (false);
+
+	return nRet;
 }

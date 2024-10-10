@@ -7,9 +7,15 @@
 #include "UIAutomationHelper.h"
 #include <mutex>
 
+
+#define UIA_BUILD_UIA					WM_USER + 1
+#define UIA_GET_ELEMENT_PROP			WM_USER + 2
+
 // CInspectDlg dialog
 class CInspectDlg : public CDialogEx
 {
+	friend LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
 // Construction
 public:
 	CInspectDlg(CWnd* pParent = nullptr);	// standard constructor
@@ -40,13 +46,11 @@ protected:
 		HTREEITEM hItemPreviousSibling,
 		__out HTREEITEM* phItem);
 	int BuildUITreeThread();
-	std::mutex m_mutex;
-	std::condition_variable m_cvReloadUITree;
-	bool m_bReloadUITree = false;
+
+public:
 	CTreeCtrl m_treUIA;
 	CListCtrl m_lstElementProp;
 	CUIAutomationHelper m_UIAHelper;
-	std::atomic<bool> m_bRunning = true;
 
 public:
 	afx_msg void OnBnClickedBtnBuildUiTree();

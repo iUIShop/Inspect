@@ -26,6 +26,9 @@ enum UIAUTOMATION_ERROR
 class CUIElement
 {
 public:
+	int InitProp();
+
+public:
 	CUIElement* m_pParent = nullptr;
 	CUIElement* m_pChild = nullptr;	// 第一个孩子
 	CUIElement* m_pNext = nullptr;	// 下面第一个兄弟
@@ -56,6 +59,8 @@ public:
 	HWND m_hWnd = nullptr;
 	UINT m_Orientation;
 	UINT m_uPid = 0;
+
+	BOOL m_bInitProp = FALSE;
 };
 
 // 不支持多线程，所以A线程中的IUIAutomationElement，不能在B线程中使用。
@@ -113,5 +118,7 @@ protected:
 // 所以，我们模拟Windows的消息循环，让一个线程，即可以遍历，又可以解析
 // 我们必须创建一个消息队列
 LRESULT SendMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT PostMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);
+BOOL GetMsg(__out LPMSG lpMsg, WNDPROC fnMsgHandler);
 
 HRESULT InvokeButton(IUIAutomationElement* pButtonElement);
