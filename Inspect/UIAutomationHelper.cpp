@@ -103,39 +103,17 @@ IUIAutomation* CUIAutomationHelper::GetAutomation()
 
 int CUIAutomationHelper::BuildControlTree()
 {
-	// 获取树遍历器
-	IUIAutomationTreeWalker* pTreeWalker = nullptr;
-	m_pClientUIA->get_ControlViewWalker(&pTreeWalker);
-
-	// 从根元素开始遍历
-	IUIAutomationElement* pCurrentElement = m_pRootElement;
-
-	while (pCurrentElement != NULL)
-	{
-		IUIAutomationElement *pChildElement = nullptr;
-
-		// 移动到下一个元素
-		pTreeWalker->GetFirstChildElement(pCurrentElement, &pChildElement);
-		if (pChildElement == nullptr)
-		{
-			int n = 9;
-		}
-		GetElementProp(pChildElement, nullptr);
-
-		pCurrentElement = pChildElement;
-	}
-
-	return 0;
+	return -1;
 }
 
 int CUIAutomationHelper::BuildContentTree()
 {
-	return 0;
+	return -1;
 }
 
 int CUIAutomationHelper::WalkerElement(IUIAutomationElement* pElement, LPARAM lParam, CUIElement* pParent, CUIElement* pPreviousSibling, __out CUIElement **ppElement)
 {
-	GetElementProp(pElement, ppElement);
+	CreateElementProp(pElement, ppElement);
 
 	(*ppElement)->m_pParent = pParent;
 
@@ -243,21 +221,30 @@ int CUIAutomationHelper::GetElementsByControlType(long lControlType, LPCWSTR lps
 	return -1;
 }
 
-int CUIAutomationHelper::GetElementProp(IUIAutomationElement* pElement, CUIElement** ppElement)
+int CUIAutomationHelper::CreateElementProp(IUIAutomationElement* pElement, CUIElement** ppElement)
 {
-	HRESULT hr;
+	HRESULT hr = S_OK;
 	int nRet = 0;
 
 	do
 	{
-		if (nullptr == pElement)
+		if (nullptr == pElement || nullptr == ppElement)
 		{
-			nRet = -1;
+			nRet = UIAE_INVALID_PARAM;
 			break;
 		}
+
 		// title
 		BSTR bstrName;
 		hr = pElement->get_CurrentName(&bstrName);
+		if (FAILED(hr))
+		{
+			nRet = UIAE_GET_NAME;
+			break;
+		}
+
+		BSTR bstrLocalizedControlType;
+		hr = pElement->get_CurrentLocalizedControlType(&bstrLocalizedControlType);
 		if (FAILED(hr))
 		{
 			nRet = UIAE_GET_NAME;
@@ -269,14 +256,6 @@ int CUIAutomationHelper::GetElementProp(IUIAutomationElement* pElement, CUIEleme
 		if (eType == UIA_GroupControlTypeId)
 		{
 			int n = 0;
-		}
-
-		BSTR bstrLocalizedControlType;
-		hr = pElement->get_CurrentLocalizedControlType(&bstrLocalizedControlType);
-		if (FAILED(hr))
-		{
-			nRet = UIAE_GET_NAME;
-			break;
 		}
 
 		BSTR bstrAutomationId;
@@ -343,48 +322,25 @@ int CUIAutomationHelper::GetElementProp(IUIAutomationElement* pElement, CUIEleme
 			break;
 		}
 
-		CUIElement eleProp;
-		eleProp.m_pElement = pElement;
-		eleProp.m_strName = bstrName == nullptr ? L"" : bstrName ;
-		eleProp.m_strAutomationId = bstrAutomationId == nullptr ? L"" : bstrAutomationId;
-		eleProp.m_ControlType = eType;
-		eleProp.m_strLocalizedControlType = bstrLocalizedControlType == nullptr ? L"" : bstrLocalizedControlType;
-		eleProp.m_strFrameworkId = bstrFrameworkId == nullptr ? L"" : bstrFrameworkId;
-		eleProp.m_strItemType = bstrItemType == nullptr ? L"" : bstrItemType;
-		eleProp.m_strItemStatus = bstrItemStatus == nullptr ? L"" : bstrItemStatus;
-		eleProp.m_strClassName = bstrClassName == nullptr ? L"" : bstrClassName;
-		eleProp.m_strHelpText = bstrHelpText == nullptr ? L"" : bstrHelpText;
+		*ppElement = new CUIElement;
+		(*ppElement)->m_pBindElement = pElement;
 
-		if (nullptr != ppElement)
-		{
-			*ppElement = new CUIElement;
-			*(*ppElement) = eleProp;
-		}
-
-		OnGetElementProp(&eleProp);
+		(*ppElement)->m_strName = bstrName == nullptr ? L"" : bstrName;
+		(*ppElement)->m_strLocalizedControlType = bstrLocalizedControlType == nullptr ? L"" : bstrLocalizedControlType;
+		(*ppElement)->m_strAutomationId = bstrAutomationId == nullptr ? L"" : bstrAutomationId;
+		(*ppElement)->m_ControlType = eType;
+		(*ppElement)->m_strFrameworkId = bstrFrameworkId == nullptr ? L"" : bstrFrameworkId;
+		(*ppElement)->m_strItemType = bstrItemType == nullptr ? L"" : bstrItemType;
+		(*ppElement)->m_strItemStatus = bstrItemStatus == nullptr ? L"" : bstrItemStatus;
+		(*ppElement)->m_strClassName = bstrClassName == nullptr ? L"" : bstrClassName;
+		(*ppElement)->m_strHelpText = bstrHelpText == nullptr ? L"" : bstrHelpText;
 
 	} while (false);
 
 	return nRet;
 }
 
-void CUIAutomationHelper::SetOnGetElementPropFunc(OnGetElementPropFunc funcCallback, void *pArg)
-{
-	m_pOnGetElementPropFunc = funcCallback;
-	m_pOnGetElementPropArg = pArg;
-
-}
-
-const CUIElement* CUIAutomationHelper::GetRootElement() const
+CUIElement* CUIAutomationHelper::GetRootElement()
 {
 	return m_pElement;
-}
-
-int CUIAutomationHelper::OnGetElementProp(const CUIElement* pEleProp)
-{
-	if (nullptr != m_pOnGetElementPropFunc)
-	{
-		m_pOnGetElementPropFunc(pEleProp, m_pOnGetElementPropArg);
-	}
-	return 0;
 }

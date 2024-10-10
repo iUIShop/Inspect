@@ -30,7 +30,7 @@ public:
 	CUIElement* m_pChild = nullptr;
 	CUIElement* m_pNext = nullptr;
 
-	IUIAutomationElement* m_pElement = nullptr;
+	IUIAutomationElement* m_pBindElement = nullptr;
 
 	std::wstring m_strAcceleratorKey;
 	std::wstring m_strAccessKey;
@@ -58,8 +58,6 @@ public:
 	UINT m_uPid = 0;
 };
 
-typedef int (*OnGetElementPropFunc)(const CUIElement* pEleProp, void *pArg);
-
 class CUIAutomationHelper
 {
 public:
@@ -81,13 +79,11 @@ public:
 	int GetElementByControlType(long lControlType, LPCWSTR lpszText, BOOL bEqual, IUIAutomationElement** ppElement);
 	int GetElementsByControlType(long lControlType, LPCWSTR lpszText, BOOL bEqual, std::vector<IUIAutomationElement*> *pElements);
 
-	int GetElementProp(IUIAutomationElement* pElement, CUIElement** ppElement);
-	void SetOnGetElementPropFunc(OnGetElementPropFunc funcCallback, void *pArg);
+	int CreateElementProp(IUIAutomationElement* pElement, CUIElement** ppElement);
 
-	const CUIElement* GetRootElement() const;
+	CUIElement* GetRootElement();
 
 protected:
-	int OnGetElementProp(const CUIElement*pEleProp);
 	int WalkerElement(IUIAutomationElement* pElement, LPARAM lParam, CUIElement* pParent, CUIElement* pPreviousSibling, __out CUIElement** ppElement);
 	int BuildTrueTreeRecursive(IUIAutomationTreeWalker* pWalker, IUIAutomationElement* pParentElement, LPARAM lParam, CUIElement* pParent, CUIElement* pPreviousSibling, __out CUIElement** ppNewElement);
 
@@ -95,8 +91,6 @@ protected:
 	HWND m_hWndHost = nullptr;
 	CComPtr<IUIAutomation> m_pClientUIA;
 	IUIAutomationElement *m_pRootElement = nullptr;
-	OnGetElementPropFunc m_pOnGetElementPropFunc = nullptr;
-	void* m_pOnGetElementPropArg = nullptr;
 
 	CUIElement* m_pElement = nullptr;
 };

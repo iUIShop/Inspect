@@ -35,7 +35,7 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 protected:
-	int WalkerUITree(const CUIElement *pElement,
+	int WalkerUITree(CUIElement *pElement,
 		HTREEITEM hItemParent,
 		HTREEITEM hItemPreviousSibling,
 		__out HTREEITEM* phItem);
@@ -43,7 +43,10 @@ protected:
 	std::mutex m_mutex;
 	std::condition_variable m_cvReloadUITree;
 	bool m_bReloadUITree = false;
+	CTreeCtrl m_treUIA;
+	CListCtrl m_lstElementProp;
+
 public:
 	afx_msg void OnBnClickedBtnBuildUiTree();
-	CTreeCtrl m_treUIA;
+	afx_msg void OnTvnSelchangedTreUia(NMHDR* pNMHDR, LRESULT* pResult);
 };

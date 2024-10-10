@@ -61,6 +61,7 @@ void CInspectDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_TRE_UIA, m_treUIA);
+	DDX_Control(pDX, IDC_LST_ELEMENT_PROP, m_lstElementProp);
 }
 
 BEGIN_MESSAGE_MAP(CInspectDlg, CDialogEx)
@@ -68,6 +69,7 @@ BEGIN_MESSAGE_MAP(CInspectDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BTN_BUILD_UI_TREE, &CInspectDlg::OnBnClickedBtnBuildUiTree)
+	ON_NOTIFY(TVN_SELCHANGED, IDC_TRE_UIA, &CInspectDlg::OnTvnSelchangedTreUia)
 END_MESSAGE_MAP()
 
 
@@ -103,6 +105,13 @@ BOOL CInspectDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// Set small icon
 
 	// TODO: Add extra initialization here
+
+	m_lstElementProp.InsertColumn(0, L"Name", 0, 200);
+	m_lstElementProp.InsertColumn(1, L"Value", 0, 500);
+	//LONG lStyleEx = GetWindowLongW(m_lstElementProp.GetSafeHwnd(), GWL_EXSTYLE);
+	//lStyleEx |= LVS_EX_GRIDLINES | LVS_EX_FULLROWSELECT;
+	//SetWindowLongW(m_lstElementProp.GetSafeHwnd(), GWL_EXSTYLE, lStyleEx);
+
 	std::thread t(&CInspectDlg::BuildUITreeThread, this);
 	t.detach();
 
@@ -158,7 +167,7 @@ HCURSOR CInspectDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-int CInspectDlg::WalkerUITree(const CUIElement* pElement,
+int CInspectDlg::WalkerUITree(CUIElement* pElement,
 	HTREEITEM hItemParent,
 	HTREEITEM hItemPreviousSibling,
 	__out HTREEITEM *phItem)
@@ -183,6 +192,7 @@ int CInspectDlg::WalkerUITree(const CUIElement* pElement,
 	{
 		*phItem = m_treUIA.InsertItem(strItem, hItemParent, hItemPreviousSibling);
 	}
+	m_treUIA.SetItemData(*phItem, (DWORD_PTR)pElement);
 
 	CUIElement* pChildElement = pElement->m_pChild;
 	HTREEITEM hPreviousSibling = nullptr;
@@ -208,14 +218,28 @@ int CInspectDlg::BuildUITreeThread()
 		m_cvReloadUITree.wait(locker, [this] {return m_bReloadUITree; });
 		m_bReloadUITree = false;
 
+		CWnd *pButton = GetDlgItem(IDC_BTN_BUILD_UI_TREE);
+
+		pButton->EnableWindow(FALSE);
+		m_treUIA.DeleteAllItems();
+		m_lstElementProp.DeleteAllItems();
+
+		ULONGLONG dwTime1 = GetTickCount64();
 		CUIAutomationHelper helper;
 		helper.Init(nullptr);	// Desktop
 		helper.BuildRawTree();
 
-		m_treUIA.DeleteAllItems();
-		const CUIElement *pRootElement = helper.GetRootElement();
+		ULONGLONG dwLoadUIATreeTime = GetTickCount64() - dwTime1;
+
+		ULONGLONG dwTime2 = GetTickCount64();
+		CUIElement *pRootElement = helper.GetRootElement();
 		HTREEITEM hItem = nullptr;
 		WalkerUITree(pRootElement, nullptr, nullptr, &hItem);
+		m_treUIA.Expand(hItem, TVE_EXPAND);
+		m_treUIA.SelectItem(hItem);
+		ULONGLONG dwInsertTreeControlTime = GetTickCount64() - dwTime2;
+
+		pButton->EnableWindow(TRUE);
 	}
 
 	CoUninitialize();
@@ -228,4 +252,38 @@ void CInspectDlg::OnBnClickedBtnBuildUiTree()
 {
 	m_bReloadUITree = true;
 	m_cvReloadUITree.notify_one();
+}
+
+void CInspectDlg::OnTvnSelchangedTreUia(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
+	*pResult = 0;
+
+	HTREEITEM hItem = m_treUIA.GetSelectedItem();
+	if (nullptr != hItem)
+	{
+		CUIElement *pElement = (CUIElement*)m_treUIA.GetItemData(hItem);
+		_ASSERT(nullptr != pElement);
+
+		m_lstElementProp.DeleteAllItems();
+		int nIndex = m_lstElementProp.InsertItem(0, L"Name");
+		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strName.c_str());
+
+		nIndex = m_lstElementProp.InsertItem(1, L"AutomationId");
+		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strAutomationId.c_str());
+
+		nIndex = m_lstElementProp.InsertItem(2, L"ControlType");
+		CStringW strControlType;
+		strControlType.Format(L"%d", pElement->m_ControlType);
+		m_lstElementProp.SetItemText(nIndex, 1, strControlType);
+
+		nIndex = m_lstElementProp.InsertItem(3, L"LocalizedControlType");
+		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strLocalizedControlType.c_str());
+
+		nIndex = m_lstElementProp.InsertItem(4, L"ItemType");
+		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strItemType.c_str());
+
+		nIndex = m_lstElementProp.InsertItem(5, L"ClassName");
+		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strClassName.c_str());
+	}
 }
