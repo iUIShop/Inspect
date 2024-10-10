@@ -45,8 +45,11 @@ protected:
 	bool m_bReloadUITree = false;
 	CTreeCtrl m_treUIA;
 	CListCtrl m_lstElementProp;
+	CUIAutomationHelper m_UIAHelper;
+	std::atomic<bool> m_bRunning = true;
 
 public:
 	afx_msg void OnBnClickedBtnBuildUiTree();
 	afx_msg void OnTvnSelchangedTreUia(NMHDR* pNMHDR, LRESULT* pResult);
+	afx_msg void OnClose();
 };

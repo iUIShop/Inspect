@@ -70,6 +70,7 @@ BEGIN_MESSAGE_MAP(CInspectDlg, CDialogEx)
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BTN_BUILD_UI_TREE, &CInspectDlg::OnBnClickedBtnBuildUiTree)
 	ON_NOTIFY(TVN_SELCHANGED, IDC_TRE_UIA, &CInspectDlg::OnTvnSelchangedTreUia)
+	ON_WM_CLOSE()
 END_MESSAGE_MAP()
 
 
@@ -212,11 +213,16 @@ int CInspectDlg::BuildUITreeThread()
 {
 	CoInitialize(nullptr);
 
-	while (true)
+	while (m_bRunning)
 	{
 		std::unique_lock<std::mutex> locker(m_mutex);
 		m_cvReloadUITree.wait(locker, [this] {return m_bReloadUITree; });
 		m_bReloadUITree = false;
+
+		if (!m_bRunning)
+		{
+			break;
+		}
 
 		CWnd *pButton = GetDlgItem(IDC_BTN_BUILD_UI_TREE);
 
@@ -225,14 +231,14 @@ int CInspectDlg::BuildUITreeThread()
 		m_lstElementProp.DeleteAllItems();
 
 		ULONGLONG dwTime1 = GetTickCount64();
-		CUIAutomationHelper helper;
-		helper.Init(nullptr);	// Desktop
-		helper.BuildRawTree();
+		m_UIAHelper.ReleaseUITree();
+		m_UIAHelper.Init(nullptr);	// Desktop
+		m_UIAHelper.BuildRawTree();
 
 		ULONGLONG dwLoadUIATreeTime = GetTickCount64() - dwTime1;
 
 		ULONGLONG dwTime2 = GetTickCount64();
-		CUIElement *pRootElement = helper.GetRootElement();
+		CUIElement *pRootElement = m_UIAHelper.GetRootElement();
 		HTREEITEM hItem = nullptr;
 		WalkerUITree(pRootElement, nullptr, nullptr, &hItem);
 		m_treUIA.Expand(hItem, TVE_EXPAND);
@@ -241,6 +247,8 @@ int CInspectDlg::BuildUITreeThread()
 
 		pButton->EnableWindow(TRUE);
 	}
+
+	m_UIAHelper.ReleaseUITree();
 
 	CoUninitialize();
 
@@ -286,4 +294,14 @@ void CInspectDlg::OnTvnSelchangedTreUia(NMHDR* pNMHDR, LRESULT* pResult)
 		nIndex = m_lstElementProp.InsertItem(5, L"ClassName");
 		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strClassName.c_str());
 	}
+}
+
+void CInspectDlg::OnClose()
+{
+	// TODO: Add your message handler code here and/or call default
+	m_bRunning = false;
+	m_bReloadUITree = true;
+	m_cvReloadUITree.notify_one();
+
+	CDialogEx::OnClose();
 }

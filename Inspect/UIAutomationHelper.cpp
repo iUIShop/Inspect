@@ -200,6 +200,36 @@ int CUIAutomationHelper::BuildRawTree()
 	return nRet;
 }
 
+void CUIAutomationHelper::ReleaseUITree()
+{
+	std::vector<CUIElement*> vElements;
+
+	CUIElement* pElement = m_pElement;
+	while (nullptr != pElement)
+	{
+		vElements.push_back(pElement);
+
+		pElement = GetNextElement(pElement);
+	}
+
+	for (auto& ele : vElements)
+	{
+		delete ele;
+	}
+	vElements = std::vector<CUIElement*>();
+
+	m_pElement = nullptr;
+	m_hWndHost = nullptr;
+	if (nullptr != m_pRootElement)
+	{
+		m_pRootElement->Release();
+	}
+	if (nullptr != m_pClientUIA)
+	{
+		m_pClientUIA->Release();
+	}
+}
+
 int CUIAutomationHelper::ElementFromPoint(POINT pt, IUIAutomationElement** ppElement)
 {
 	return -1;
@@ -343,4 +373,29 @@ int CUIAutomationHelper::CreateElementProp(IUIAutomationElement* pElement, CUIEl
 CUIElement* CUIAutomationHelper::GetRootElement()
 {
 	return m_pElement;
+}
+
+CUIElement* CUIAutomationHelper::GetNextElement(CUIElement* pCurElement)
+{
+	// 如果Item有孩子，并且Item是展开的，则返回第一个孩子
+	if (pCurElement->m_pChild != nullptr)
+	{
+		return pCurElement->m_pChild;
+	}
+
+checkNext:
+	// 如果Item有下一个兄弟Item，则返回下一个兄弟Item
+	if (pCurElement->m_pNext != nullptr)
+	{
+		return pCurElement->m_pNext;
+	}
+
+	// 向上沿线查找
+	pCurElement = pCurElement->m_pParent;
+	if (pCurElement != nullptr)
+	{
+		goto checkNext;
+	}
+
+	return nullptr;
 }

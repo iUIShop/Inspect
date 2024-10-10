@@ -27,8 +27,8 @@ class CUIElement
 {
 public:
 	CUIElement* m_pParent = nullptr;
-	CUIElement* m_pChild = nullptr;
-	CUIElement* m_pNext = nullptr;
+	CUIElement* m_pChild = nullptr;	// 第一个孩子
+	CUIElement* m_pNext = nullptr;	// 下面第一个兄弟
 
 	IUIAutomationElement* m_pBindElement = nullptr;
 
@@ -58,6 +58,7 @@ public:
 	UINT m_uPid = 0;
 };
 
+// 不支持多线程，所以A线程中的IUIAutomationElement，不能在B线程中使用。
 class CUIAutomationHelper
 {
 public:
@@ -72,7 +73,8 @@ public:
 	int BuildControlTree();
 	int BuildContentTree();
 	int BuildRawTree();
-	
+	void ReleaseUITree();
+
 	int ElementFromPoint(POINT pt, IUIAutomationElement** ppElement);
 	int GetElement(LPCWSTR lpszAutomationID, IUIAutomationElement** ppElement);
 	// lControlType: UIAutomationClient.h line:1318
@@ -83,13 +85,16 @@ public:
 
 	CUIElement* GetRootElement();
 
+	// 返回指定Item下方与指定Item最靠近的可见Item(按List顺序).
+	CUIElement* GetNextElement(CUIElement* pCurElement);
+
 protected:
 	int WalkerElement(IUIAutomationElement* pElement, LPARAM lParam, CUIElement* pParent, CUIElement* pPreviousSibling, __out CUIElement** ppElement);
 	int BuildTrueTreeRecursive(IUIAutomationTreeWalker* pWalker, IUIAutomationElement* pParentElement, LPARAM lParam, CUIElement* pParent, CUIElement* pPreviousSibling, __out CUIElement** ppNewElement);
 
 protected:
 	HWND m_hWndHost = nullptr;
-	CComPtr<IUIAutomation> m_pClientUIA;
+	IUIAutomation *m_pClientUIA = nullptr;
 	IUIAutomationElement *m_pRootElement = nullptr;
 
 	CUIElement* m_pElement = nullptr;
