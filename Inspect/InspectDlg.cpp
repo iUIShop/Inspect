@@ -231,7 +231,7 @@ int CInspectDlg::BuildUITreeThread()
 		m_lstElementProp.DeleteAllItems();
 
 		ULONGLONG dwTime1 = GetTickCount64();
-		m_UIAHelper.ReleaseUITree();
+		m_UIAHelper.Release();
 		m_UIAHelper.Init(nullptr);	// Desktop
 		m_UIAHelper.BuildRawTree();
 
@@ -248,7 +248,7 @@ int CInspectDlg::BuildUITreeThread()
 		pButton->EnableWindow(TRUE);
 	}
 
-	m_UIAHelper.ReleaseUITree();
+	m_UIAHelper.Release();
 
 	CoUninitialize();
 

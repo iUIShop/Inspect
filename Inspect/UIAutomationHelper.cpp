@@ -1,8 +1,66 @@
 ﻿#include "UIAutomationHelper.h"
 #include <atlstr.h>
+#include <list>
+#include <mutex>
 #include <UIAutomation.h>
 #include <UIAutomationClient.h>
+
 #pragma comment(lib, "UIAutomationCore.lib")
+
+
+class CMsgQueue
+{
+	bool IsEmpty() const
+	{
+		return m_queue.empty();
+	}
+
+public:
+	CMsgQueue()
+	{
+
+	}
+
+	void Put(const MSG& msg)
+	{
+		std::unique_lock<std::mutex> locker(m_mutex);
+
+		m_queue.push_back(msg);
+		m_notEmpty.notify_one(); // 再次拥有mutex
+	} // unique_lock释放mutex
+
+	void Take(MSG& msg)
+	{
+		// 如果队列为空，就不能取数据，线程将等待，等待插入数据的线程发出不为空的通知时，
+		// 本线程被唤醒，数据被取走。
+		// 注意，Take和Put几乎不在同一个线程中被调用。
+		std::unique_lock<std::mutex> locker(m_mutex);
+		m_notEmpty.wait(locker, [this] {return !IsEmpty(); });
+
+		msg = m_queue.front();
+		m_queue.pop_front();
+	}
+
+	bool Empty()
+	{
+		std::lock_guard<std::mutex> locker(m_mutex);
+		return m_queue.empty();
+	}
+
+	size_t Size()
+	{
+		std::lock_guard<std::mutex> locker(m_mutex);
+		return m_queue.size();
+	}
+
+private:
+	// 一个消息队列
+	std::list<MSG> m_queue;
+	std::mutex m_mutex;	// 保护m_queue
+	std::condition_variable m_notEmpty; // 队列不空的条件变量
+};
+
+CMsgQueue g_MsgQueue;
 
 // UIA_ButtonControlTypeId
 
@@ -96,21 +154,6 @@ HWND CUIAutomationHelper::GetHwnd()
 	return m_hWndHost;
 }
 
-IUIAutomation* CUIAutomationHelper::GetAutomation()
-{
-	return m_pClientUIA;
-}
-
-int CUIAutomationHelper::BuildControlTree()
-{
-	return -1;
-}
-
-int CUIAutomationHelper::BuildContentTree()
-{
-	return -1;
-}
-
 int CUIAutomationHelper::WalkerElement(IUIAutomationElement* pElement, LPARAM lParam, CUIElement* pParent, CUIElement* pPreviousSibling, __out CUIElement **ppElement)
 {
 	CreateElementProp(pElement, ppElement);
@@ -200,7 +243,7 @@ int CUIAutomationHelper::BuildRawTree()
 	return nRet;
 }
 
-void CUIAutomationHelper::ReleaseUITree()
+void CUIAutomationHelper::Release()
 {
 	std::vector<CUIElement*> vElements;
 
