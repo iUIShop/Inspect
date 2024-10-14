@@ -23,15 +23,15 @@ enum UIAUTOMATION_ERROR
 	UIAE_GET_CLASS_NAME = -11,
 };
 
-class CUIElement
+class CUINode
 {
 public:
 	int InitProp();
 
 public:
-	CUIElement* m_pParent = nullptr;
-	CUIElement* m_pChild = nullptr;	// 第一个孩子
-	CUIElement* m_pNext = nullptr;	// 下面第一个兄弟
+	CUINode* m_pParent = nullptr;
+	CUINode* m_pChild = nullptr;	// 第一个孩子
+	CUINode* m_pNext = nullptr;	// 下面第一个兄弟
 
 	IUIAutomationElement* m_pBindElement = nullptr;
 
@@ -83,23 +83,24 @@ public:
 
 	int ElementFromPoint(POINT pt, IUIAutomationElement** ppElement);
 	int GetElement(LPCWSTR lpszAutomationID, IUIAutomationElement** ppElement);
+	int GetCacheElement(LPCWSTR lpszAutomationID, IUIAutomationElement** ppElement);
 	// lControlType: UIAutomationClient.h line:1318
 	int GetElementByControlType(long lControlType, LPCWSTR lpszText, BOOL bEqual, IUIAutomationElement** ppElement);
 	int GetElementsByControlType(long lControlType, LPCWSTR lpszText, BOOL bEqual, std::vector<IUIAutomationElement*> *pElements);
 
-	// 基于第一个参数pElement，创建出第二个参数ppElement来。
-	int CreateElementProp(IUIAutomationElement* pElement, CUIElement** ppElement);
+	// 基于第一个参数pElement，创建出第二个参数ppUINode来。
+	int CreateElementProp(IUIAutomationElement* pElement, CUINode** ppUINode);
 
-	CUIElement* GetRootElement();
+	CUINode* GetRootUINode();
 
 	// 返回指定Item下方与指定Item最靠近的可见Item(按List顺序).
-	CUIElement* GetNextElement(CUIElement* pCurElement);
+	CUINode* GetNextElement(CUINode* pCurElement);
 
 protected:
 	// 遍历到pElement的回调。BuildTrueTreeRecursive在遍历到元素后，就会调用WalkerElement
-	int WalkerElement(IUIAutomationElement* pElement, LPARAM lParam, CUIElement* pParent, CUIElement* pPreviousSibling, __out CUIElement** ppElement);
+	int WalkerElement(IUIAutomationElement* pElement, LPARAM lParam, CUINode* pParent, CUINode* pPreviousSibling, __out CUINode** ppUINode);
 	// 遍历元素pParentElement
-	int BuildTrueTreeRecursive(IUIAutomationTreeWalker* pWalker, IUIAutomationElement* pParentElement, LPARAM lParam, CUIElement* pParent, CUIElement* pPreviousSibling, __out CUIElement** ppNewElement);
+	int BuildTrueTreeRecursive(IUIAutomationTreeWalker* pWalker, IUIAutomationElement* pParentElement, LPARAM lParam, CUINode* pParent, CUINode* pPreviousSibling, __out CUINode** ppNewElement);
 
 protected:
 	HWND m_hWndHost = nullptr;
@@ -107,14 +108,14 @@ protected:
 	IUIAutomationElement *m_pRootElement = nullptr;
 
 	// UI Automation元素树型结构
-	CUIElement* m_pElement = nullptr;
+	CUINode* m_pRootNode = nullptr;
 };
 
 // 由于UI Automation不支持多线程，并且遍历整个桌面很慢。
 // 所以，我们在遍历到IUIAutomationElement后，先不解析IUIAutomationElement
 // 等用到IUIAutomationElement的时候再解析。
-// 但由于遍历和解析必须在同一个线程中，线程在遍历完后，生成未解析属性的CUIElement树
-// 等使用CUIElement的属性时，解析的那个线程可能早已退出。
+// 但由于遍历和解析必须在同一个线程中，线程在遍历完后，生成未解析属性的CUINode树
+// 等使用CUINode的属性时，解析的那个线程可能早已退出。
 // 所以，我们模拟Windows的消息循环，让一个线程，即可以遍历，又可以解析
 // 我们必须创建一个消息队列
 LRESULT SendMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);

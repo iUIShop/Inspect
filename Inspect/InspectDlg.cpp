@@ -168,12 +168,12 @@ HCURSOR CInspectDlg::OnQueryDragIcon()
 	return static_cast<HCURSOR>(m_hIcon);
 }
 
-int CInspectDlg::WalkerUITree(CUIElement* pElement,
+int CInspectDlg::WalkerUITree(CUINode* pUINode,
 	HTREEITEM hItemParent,
 	HTREEITEM hItemPreviousSibling,
 	__out HTREEITEM *phItem)
 {
-	if (nullptr == pElement)
+	if (nullptr == pUINode)
 	{
 		return -1;
 	}
@@ -181,9 +181,9 @@ int CInspectDlg::WalkerUITree(CUIElement* pElement,
 	// втря
 	CStringW strItem;
 	strItem = L"\"";
-	strItem += pElement->m_strName.c_str();
+	strItem += pUINode->m_strName.c_str();
 	strItem += L"\" ";
-	strItem += pElement->m_strLocalizedControlType.c_str();
+	strItem += pUINode->m_strLocalizedControlType.c_str();
 
 	if (nullptr == hItemParent)
 	{
@@ -193,9 +193,9 @@ int CInspectDlg::WalkerUITree(CUIElement* pElement,
 	{
 		*phItem = m_treUIA.InsertItem(strItem, hItemParent, hItemPreviousSibling);
 	}
-	m_treUIA.SetItemData(*phItem, (DWORD_PTR)pElement);
+	m_treUIA.SetItemData(*phItem, (DWORD_PTR)pUINode);
 
-	CUIElement* pChildElement = pElement->m_pChild;
+	CUINode* pChildElement = pUINode->m_pChild;
 	HTREEITEM hPreviousSibling = nullptr;
 	while (nullptr != pChildElement)
 	{
@@ -228,7 +228,7 @@ LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		ULONGLONG dwLoadUIATreeTime = GetTickCount64() - dwTime1;
 
 		ULONGLONG dwTime2 = GetTickCount64();
-		CUIElement* pRootElement = pThis->m_UIAHelper.GetRootElement();
+		CUINode* pRootElement = pThis->m_UIAHelper.GetRootUINode();
 		HTREEITEM hItem = nullptr;
 		pThis->WalkerUITree(pRootElement, nullptr, nullptr, &hItem);
 		pThis->m_treUIA.Expand(hItem, TVE_EXPAND);
@@ -240,8 +240,8 @@ LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 	else if (UIA_GET_ELEMENT_PROP == uMsg)
 	{
 		CInspectDlg* pThis = (CInspectDlg*)wParam;
-		CUIElement* pElement = (CUIElement*)lParam;
-		pElement->InitProp();
+		CUINode* pUINode = (CUINode*)lParam;
+		pUINode->InitProp();
 	}
 
 	return 0;
@@ -277,34 +277,34 @@ void CInspectDlg::OnTvnSelchangedTreUia(NMHDR* pNMHDR, LRESULT* pResult)
 	HTREEITEM hItem = m_treUIA.GetSelectedItem();
 	if (nullptr != hItem)
 	{
-		CUIElement *pElement = (CUIElement*)m_treUIA.GetItemData(hItem);
-		_ASSERT(nullptr != pElement);
+		CUINode* pUINode = (CUINode*)m_treUIA.GetItemData(hItem);
+		_ASSERT(nullptr != pUINode);
 
-		if (!pElement->m_bInitProp)
+		if (!pUINode->m_bInitProp)
 		{
-			SendMsg(UIA_GET_ELEMENT_PROP, WPARAM(this), LPARAM(pElement));
+			SendMsg(UIA_GET_ELEMENT_PROP, WPARAM(this), LPARAM(pUINode));
 		}
 
 		m_lstElementProp.DeleteAllItems();
 		int nIndex = m_lstElementProp.InsertItem(0, L"Name");
-		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strName.c_str());
+		m_lstElementProp.SetItemText(nIndex, 1, pUINode->m_strName.c_str());
 
 		nIndex = m_lstElementProp.InsertItem(1, L"AutomationId");
-		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strAutomationId.c_str());
+		m_lstElementProp.SetItemText(nIndex, 1, pUINode->m_strAutomationId.c_str());
 
 		nIndex = m_lstElementProp.InsertItem(2, L"ControlType");
 		CStringW strControlType;
-		strControlType.Format(L"%d", pElement->m_ControlType);
+		strControlType.Format(L"%d", pUINode->m_ControlType);
 		m_lstElementProp.SetItemText(nIndex, 1, strControlType);
 
 		nIndex = m_lstElementProp.InsertItem(3, L"LocalizedControlType");
-		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strLocalizedControlType.c_str());
+		m_lstElementProp.SetItemText(nIndex, 1, pUINode->m_strLocalizedControlType.c_str());
 
 		nIndex = m_lstElementProp.InsertItem(4, L"ItemType");
-		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strItemType.c_str());
+		m_lstElementProp.SetItemText(nIndex, 1, pUINode->m_strItemType.c_str());
 
 		nIndex = m_lstElementProp.InsertItem(5, L"ClassName");
-		m_lstElementProp.SetItemText(nIndex, 1, pElement->m_strClassName.c_str());
+		m_lstElementProp.SetItemText(nIndex, 1, pUINode->m_strClassName.c_str());
 	}
 }
 

@@ -206,25 +206,25 @@ HWND CUIAutomationHelper::GetHwnd()
 	return m_hWndHost;
 }
 
-int CUIAutomationHelper::WalkerElement(IUIAutomationElement* pElement, LPARAM lParam, CUIElement* pParent, CUIElement* pPreviousSibling, __out CUIElement **ppElement)
+int CUIAutomationHelper::WalkerElement(IUIAutomationElement* pElement, LPARAM lParam, CUINode* pParent, CUINode* pPreviousSibling, __out CUINode** ppUINode)
 {
-	CreateElementProp(pElement, ppElement);
+	CreateElementProp(pElement, ppUINode);
 
-	(*ppElement)->m_pParent = pParent;
+	(*ppUINode)->m_pParent = pParent;
 
 	if (nullptr == pParent)
 	{
-		m_pElement = *ppElement;
+		m_pRootNode = *ppUINode;
 	}
 	else
 	{
 		if (nullptr == pPreviousSibling)
 		{
-			pParent->m_pChild = *ppElement;
+			pParent->m_pChild = *ppUINode;
 		}
 		else
 		{
-			pPreviousSibling->m_pNext = *ppElement;
+			pPreviousSibling->m_pNext = *ppUINode;
 		}
 	}
 
@@ -232,7 +232,7 @@ int CUIAutomationHelper::WalkerElement(IUIAutomationElement* pElement, LPARAM lP
 }
 
 int CUIAutomationHelper::BuildTrueTreeRecursive(IUIAutomationTreeWalker* pWalker, IUIAutomationElement* pCurElement, LPARAM lParam,
-	CUIElement *pParent, CUIElement *pPreviousSibling, __out CUIElement **ppNewElement)
+	CUINode* pParent, CUINode* pPreviousSibling, __out CUINode** ppUINode)
 {
 	HRESULT hr = S_OK;
 	int nRet = 0;
@@ -240,11 +240,11 @@ int CUIAutomationHelper::BuildTrueTreeRecursive(IUIAutomationTreeWalker* pWalker
 	do
 	{
 		// 自已
-		CUIElement* pElement = nullptr;
-		WalkerElement(pCurElement, lParam, pParent, pPreviousSibling, &pElement);
-		if (nullptr != ppNewElement)
+		CUINode* pUINode = nullptr;
+		WalkerElement(pCurElement, lParam, pParent, pPreviousSibling, &pUINode);
+		if (nullptr != ppUINode)
 		{
-			*ppNewElement = pElement;
+			*ppUINode = pUINode;
 		}
 
 		// 所有儿子
@@ -256,11 +256,11 @@ int CUIAutomationHelper::BuildTrueTreeRecursive(IUIAutomationTreeWalker* pWalker
 			break;
 		}
 
-		CUIElement* pChildPreviousSibling = nullptr;
+		CUINode* pChildPreviousSibling = nullptr;
 		while (nullptr != pChild)
 		{
-			CUIElement* pNewElement = nullptr;
-			BuildTrueTreeRecursive(pWalker, pChild, lParam, pElement, pChildPreviousSibling, &pNewElement);
+			CUINode* pNewElement = nullptr;
+			BuildTrueTreeRecursive(pWalker, pChild, lParam, pUINode, pChildPreviousSibling, &pNewElement);
 			pChildPreviousSibling = pNewElement;
 
 			IUIAutomationElement* pNext = nullptr;
@@ -287,9 +287,9 @@ int CUIAutomationHelper::BuildRawTree()
 			break;
 		}
 
-		CUIElement* pRootElement = nullptr;
+		CUINode* pRootElement = nullptr;
 		nRet = BuildTrueTreeRecursive(pWalker, m_pRootElement, LPARAM(this), nullptr, nullptr, &pRootElement);
-		_ASSERT(pRootElement == m_pElement);
+		_ASSERT(pRootElement == m_pRootNode);
 	} while (false);
 
 	return nRet;
@@ -297,23 +297,23 @@ int CUIAutomationHelper::BuildRawTree()
 
 void CUIAutomationHelper::Release()
 {
-	std::vector<CUIElement*> vElements;
+	std::vector<CUINode*> vElements;
 
-	CUIElement* pElement = m_pElement;
-	while (nullptr != pElement)
+	CUINode* pUINode = m_pRootNode;
+	while (nullptr != pUINode)
 	{
-		vElements.push_back(pElement);
+		vElements.push_back(pUINode);
 
-		pElement = GetNextElement(pElement);
+		pUINode = GetNextElement(pUINode);
 	}
 
 	for (auto& ele : vElements)
 	{
 		delete ele;
 	}
-	vElements = std::vector<CUIElement*>();
+	vElements = std::vector<CUINode*>();
 
-	m_pElement = nullptr;
+	m_pRootNode = nullptr;
 	m_hWndHost = nullptr;
 	if (nullptr != m_pRootElement)
 	{
@@ -325,17 +325,41 @@ void CUIAutomationHelper::Release()
 	}
 }
 
-int CUIAutomationHelper::ElementFromPoint(POINT pt, IUIAutomationElement** ppElement)
+int CUIAutomationHelper::ElementFromPoint(POINT pt, IUIAutomationElement** ppUINode)
 {
 	return -1;
 }
 
-int CUIAutomationHelper::GetElement(LPCWSTR lpszElementID, IUIAutomationElement** ppElement)
+// 由于UI上的元素有可能是动态生成和销毁的，所以我们不能使用保存的UI树来查询
+// 而应该是每次查询前实时获取一次。
+int CUIAutomationHelper::GetElement(LPCWSTR lpszElementID, IUIAutomationElement** ppUINode)
 {
+	Release();
+
 	return -1;
 }
 
-int CUIAutomationHelper::GetElementByControlType(long lControlType, LPCWSTR lpszText, BOOL bEqual, IUIAutomationElement** ppElement)
+// 从已有的UI树中查询
+int CUIAutomationHelper::GetCacheElement(LPCWSTR lpszAutomationID, IUIAutomationElement** ppUINode)
+{
+	CUINode* pUINode = m_pRootNode;
+	while (nullptr != pUINode)
+	{
+		if (pUINode->m_strAutomationId == lpszAutomationID)
+		{
+			if (*ppUINode != nullptr)
+			{
+				*ppUINode = pUINode->m_pBindElement;
+			}
+			break;
+		}
+
+		pUINode = GetNextElement(pUINode);
+	}
+	return 0;
+}
+
+int CUIAutomationHelper::GetElementByControlType(long lControlType, LPCWSTR lpszText, BOOL bEqual, IUIAutomationElement** ppUINode)
 {
 
 	return -1;
@@ -346,19 +370,20 @@ int CUIAutomationHelper::GetElementsByControlType(long lControlType, LPCWSTR lps
 	return -1;
 }
 
-int CUIAutomationHelper::CreateElementProp(IUIAutomationElement* pElement, CUIElement** ppElement)
+int CUIAutomationHelper::CreateElementProp(IUIAutomationElement* pElement, CUINode** ppUINode)
 {
 	HRESULT hr = S_OK;
 	int nRet = 0;
 
 	do
 	{
-		if (nullptr == pElement || nullptr == ppElement)
+		if (nullptr == pElement || nullptr == ppUINode)
 		{
 			nRet = UIAE_INVALID_PARAM;
 			break;
 		}
 
+		// 先只加载name和控件类型属性用于显示，其它属性等用到的时候再加载。
 		// title
 		BSTR bstrName;
 		hr = pElement->get_CurrentName(&bstrName);
@@ -376,101 +401,103 @@ int CUIAutomationHelper::CreateElementProp(IUIAutomationElement* pElement, CUIEl
 			break;
 		}
 
-		//CONTROLTYPEID eType;
-		//pElement->get_CurrentControlType(&eType);
-		//if (eType == UIA_GroupControlTypeId)
-		//{
-		//	int n = 0;
-		//}
+		*ppUINode = new CUINode;
+		(*ppUINode)->m_pBindElement = pElement;
+		(*ppUINode)->m_strName = bstrName == nullptr ? L"" : bstrName;
+		(*ppUINode)->m_strLocalizedControlType = bstrLocalizedControlType == nullptr ? L"" : bstrLocalizedControlType;
 
-		//BSTR bstrAutomationId;
-		//hr = pElement->get_CurrentAutomationId(&bstrAutomationId);
-		//if (FAILED(hr))
-		//{
-		//	nRet = UIAE_GET_NAME;
-		//	break;
-		//}
+		if (0)
+		{
+			CONTROLTYPEID eType;
+			pElement->get_CurrentControlType(&eType);
+			if (eType == UIA_GroupControlTypeId)
+			{
+				int n = 0;
+			}
 
-		//BSTR bstrItemType;
-		//hr = pElement->get_CurrentItemType(&bstrItemType);
-		//if (FAILED(hr))
-		//{
-		//	nRet = UIAE_GET_NAME;
-		//	break;
-		//}
+			BSTR bstrAutomationId;
+			hr = pElement->get_CurrentAutomationId(&bstrAutomationId);
+			if (FAILED(hr))
+			{
+				nRet = UIAE_GET_NAME;
+				break;
+			}
 
-		//BSTR bstrFrameworkId;
-		//hr = pElement->get_CurrentFrameworkId(&bstrFrameworkId);
-		//if (FAILED(hr))
-		//{
-		//	nRet = UIAE_GET_NAME;
-		//	break;
-		//}
+			BSTR bstrItemType;
+			hr = pElement->get_CurrentItemType(&bstrItemType);
+			if (FAILED(hr))
+			{
+				nRet = UIAE_GET_NAME;
+				break;
+			}
 
-		//BSTR bstrItemStatus;
-		//hr = pElement->get_CurrentItemStatus(&bstrItemStatus);
-		//if (FAILED(hr))
-		//{
-		//	nRet = UIAE_GET_NAME;
-		//	break;
-		//}
+			BSTR bstrFrameworkId;
+			hr = pElement->get_CurrentFrameworkId(&bstrFrameworkId);
+			if (FAILED(hr))
+			{
+				nRet = UIAE_GET_NAME;
+				break;
+			}
 
-		//BSTR bstrAriaProperties;
-		//hr = pElement->get_CurrentAriaProperties(&bstrAriaProperties);
-		//if (FAILED(hr))
-		//{
-		//	nRet = UIAE_GET_NAME;
-		//	break;
-		//}
+			BSTR bstrItemStatus;
+			hr = pElement->get_CurrentItemStatus(&bstrItemStatus);
+			if (FAILED(hr))
+			{
+				nRet = UIAE_GET_NAME;
+				break;
+			}
 
-		//BSTR bstrProviderDescription;
-		//hr = pElement->get_CurrentProviderDescription(&bstrProviderDescription);
-		//if (FAILED(hr))
-		//{
-		//	nRet = UIAE_GET_NAME;
-		//	break;
-		//}
+			BSTR bstrAriaProperties;
+			hr = pElement->get_CurrentAriaProperties(&bstrAriaProperties);
+			if (FAILED(hr))
+			{
+				nRet = UIAE_GET_NAME;
+				break;
+			}
 
-		//BSTR bstrClassName;
-		//hr = pElement->get_CurrentClassName(&bstrClassName);
-		//if (FAILED(hr))
-		//{
-		//	nRet = UIAE_GET_CLASS_NAME;
-		//	break;
-		//}
+			BSTR bstrProviderDescription;
+			hr = pElement->get_CurrentProviderDescription(&bstrProviderDescription);
+			if (FAILED(hr))
+			{
+				nRet = UIAE_GET_NAME;
+				break;
+			}
 
-		//BSTR bstrHelpText;
-		//hr = pElement->get_CurrentHelpText(&bstrHelpText);
-		//if (FAILED(hr))
-		//{
-		//	nRet = UIAE_GET_CLASS_NAME;
-		//	break;
-		//}
+			BSTR bstrClassName;
+			hr = pElement->get_CurrentClassName(&bstrClassName);
+			if (FAILED(hr))
+			{
+				nRet = UIAE_GET_CLASS_NAME;
+				break;
+			}
 
-		*ppElement = new CUIElement;
-		(*ppElement)->m_pBindElement = pElement;
+			BSTR bstrHelpText;
+			hr = pElement->get_CurrentHelpText(&bstrHelpText);
+			if (FAILED(hr))
+			{
+				nRet = UIAE_GET_CLASS_NAME;
+				break;
+			}
 
-		(*ppElement)->m_strName = bstrName == nullptr ? L"" : bstrName;
-		(*ppElement)->m_strLocalizedControlType = bstrLocalizedControlType == nullptr ? L"" : bstrLocalizedControlType;
-		//(*ppElement)->m_strAutomationId = bstrAutomationId == nullptr ? L"" : bstrAutomationId;
-		//(*ppElement)->m_ControlType = eType;
-		//(*ppElement)->m_strFrameworkId = bstrFrameworkId == nullptr ? L"" : bstrFrameworkId;
-		//(*ppElement)->m_strItemType = bstrItemType == nullptr ? L"" : bstrItemType;
-		//(*ppElement)->m_strItemStatus = bstrItemStatus == nullptr ? L"" : bstrItemStatus;
-		//(*ppElement)->m_strClassName = bstrClassName == nullptr ? L"" : bstrClassName;
-		//(*ppElement)->m_strHelpText = bstrHelpText == nullptr ? L"" : bstrHelpText;
-
+			(*ppUINode)->m_strAutomationId = bstrAutomationId == nullptr ? L"" : bstrAutomationId;
+			(*ppUINode)->m_ControlType = eType;
+			(*ppUINode)->m_strFrameworkId = bstrFrameworkId == nullptr ? L"" : bstrFrameworkId;
+			(*ppUINode)->m_strItemType = bstrItemType == nullptr ? L"" : bstrItemType;
+			(*ppUINode)->m_strItemStatus = bstrItemStatus == nullptr ? L"" : bstrItemStatus;
+			(*ppUINode)->m_strClassName = bstrClassName == nullptr ? L"" : bstrClassName;
+			(*ppUINode)->m_strHelpText = bstrHelpText == nullptr ? L"" : bstrHelpText;
+		}
 	} while (false);
 
 	return nRet;
 }
 
-CUIElement* CUIAutomationHelper::GetRootElement()
+CUINode* CUIAutomationHelper::GetRootUINode()
 {
-	return m_pElement;
+	return m_pRootNode;
 }
 
-CUIElement* CUIAutomationHelper::GetNextElement(CUIElement* pCurElement)
+CUINode* CUIAutomationHelper::GetNextElement(CUINode* pCurElement)
 {
 	// 如果Item有孩子，并且Item是展开的，则返回第一个孩子
 	if (pCurElement->m_pChild != nullptr)
@@ -495,7 +522,7 @@ checkNext:
 	return nullptr;
 }
 
-int CUIElement::InitProp()
+int CUINode::InitProp()
 {
 	HRESULT hr = S_OK;
 	int nRet = 0;

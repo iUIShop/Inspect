@@ -41,7 +41,7 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 protected:
-	int WalkerUITree(CUIElement *pElement,
+	int WalkerUITree(CUINode*pUINode,
 		HTREEITEM hItemParent,
 		HTREEITEM hItemPreviousSibling,
 		__out HTREEITEM* phItem);
