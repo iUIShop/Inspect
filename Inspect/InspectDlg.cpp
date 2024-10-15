@@ -216,13 +216,15 @@ LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		CInspectDlg* pThis = (CInspectDlg*)wParam;
 		CWnd* pButton = pThis->GetDlgItem(IDC_BTN_BUILD_UI_TREE);
 
+		HWND hWndTarget = ::FindWindowW(L"#32770", L"RaiseUIAEvent");
+		HWND hWndSharehub = ::FindWindowW(L"Sharehub", L"Sharehub");
 		pButton->EnableWindow(FALSE);
 		pThis->m_treUIA.DeleteAllItems();
 		pThis->m_lstElementProp.DeleteAllItems();
 
 		ULONGLONG dwTime1 = GetTickCount64();
 		pThis->m_UIAHelper.Release();
-		pThis->m_UIAHelper.Init(HWND(0xB121C));	// nullptr is Desktop
+		pThis->m_UIAHelper.Init(hWndSharehub);	// nullptr is Desktop
 		pThis->m_UIAHelper.BuildRawTree();
 
 		pThis->m_UIAHelper.RegisterElementStructureChangedEvent(L"home");

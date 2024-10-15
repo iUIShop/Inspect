@@ -42,9 +42,16 @@ HRESULT STDMETHODCALLTYPE StructureChangedEventHandler::HandleStructureChangedEv
 
 
 // 收到被测试程序发送的自定义事件，被测试程序是RaiseUIAEvent.exe，点击主界面的“发送自定义UIA事件”按钮可以发送。
-HRESULT __stdcall NotifyEventHandler::HandleNotificationEvent(IUIAutomationElement* sender, NotificationKind notificationKind, NotificationProcessing notificationProcessing, BSTR displayString, BSTR activityId)
+// 程序员可以调用UiaRaiseNotificationEvent发送自定义事件。
+HRESULT __stdcall NotifyEventHandler::HandleNotificationEvent(IUIAutomationElement* pSender,
+	NotificationKind notificationKind, NotificationProcessing notificationProcessing, BSTR displayString, BSTR activityId)
 {
-	return E_NOTIMPL;
+	if (nullptr != m_pBindUIA)
+	{
+		return m_pBindUIA->OnNotifyHandler(pSender, notificationKind, notificationProcessing, displayString, activityId);
+	}
+
+	return S_OK;
 }
 
 class CMsgQueue
@@ -323,6 +330,11 @@ int CUIAutomationHelper::BuildTrueTreeRecursive(IUIAutomationTreeWalker* pWalker
 	} while (false);
 
 	return nRet;
+}
+
+HRESULT CUIAutomationHelper::OnNotifyHandler(IUIAutomationElement* sender, NotificationKind notificationKind, NotificationProcessing notificationProcessing, BSTR displayString, BSTR activityId)
+{
+	return E_FAIL;
 }
 
 int CUIAutomationHelper::BuildRawTree()
@@ -609,23 +621,16 @@ int CUIAutomationHelper::RegisterElementStructureChangedEvent(LPCWSTR lpszAutoma
 	return nRet;
 }
 
-int CUIAutomationHelper::RegisterNotifyEvent(LPCWSTR lpszAutomationId)
+int CUIAutomationHelper::RegisterNotifyEvent(CUIAutomationHelper* pNotify)
 {
 	int nRet = 0;
 	do
 	{
-		CUINode* pTargetNode = nullptr;
-		GetCacheUINode(lpszAutomationId, &pTargetNode);
-		if (nullptr == pTargetNode)
-		{
-			nRet = -2;
-			break;
-		}
-
 		IUIAutomation6 *pAutomation6 = nullptr;
 		HRESULT hr = CoCreateInstance(__uuidof(CUIAutomation8), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation6),
 			reinterpret_cast<void**>(&pAutomation6));
 
+		m_pNotifyHandler->SetUIAHelper(pNotify);
 		hr = pAutomation6->AddNotificationEventHandler(m_pRootElement, TreeScope_Subtree, NULL, (IUIAutomationNotificationEventHandler*)m_pNotifyHandler);
 		if (FAILED(hr))
 		{

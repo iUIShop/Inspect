@@ -162,19 +162,19 @@ class UiaProvider : public IRawElementProviderSimple
 {
 public:
 	UiaProvider(_In_ HWND hwnd)
-		: refCount(0)
-		, controlHWnd(hwnd)
+		: m_refCount(0)
+		, m_hWndControl(hwnd)
 	{}
 
 	// IUnknown methods
 	ULONG STDMETHODCALLTYPE AddRef() final
 	{
-		return InterlockedIncrement(&refCount);
+		return InterlockedIncrement(&m_refCount);
 	}
 
 	ULONG STDMETHODCALLTYPE Release() final
 	{
-		long val = InterlockedDecrement(&refCount);
+		long val = InterlockedDecrement(&m_refCount);
 		if (val == 0)
 		{
 			delete this;
@@ -247,15 +247,16 @@ public:
 
 	HRESULT STDMETHODCALLTYPE get_HostRawElementProvider(IRawElementProviderSimple** pRetVal) final
 	{
-		return UiaHostProviderFromHwnd(controlHWnd, pRetVal);
+		return UiaHostProviderFromHwnd(m_hWndControl, pRetVal);
 	}
 
 private:
-	virtual ~UiaProvider() {
+	virtual ~UiaProvider()
+	{
 	}
 
-	ULONG refCount; // Ref Count for this COM object
-	HWND controlHWnd; // The HWND for the control.
+	ULONG m_refCount; // Ref Count for this COM object
+	HWND m_hWndControl; // The HWND for the control.
 };
 
 

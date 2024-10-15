@@ -80,9 +80,16 @@ class NotifyEventHandler : public IUIAutomationNotificationEventHandler
 {
 private:
 	LONG _refCount;
+	class CUIAutomationHelper* m_pBindUIA = nullptr;
 
 public:
 	int _eventCount;
+
+public:
+	void SetUIAHelper(CUIAutomationHelper* pUIAHelper)
+	{
+		m_pBindUIA = pUIAHelper;
+	}
 
 	// Constructor.
 	NotifyEventHandler() : _refCount(1), _eventCount(0)
@@ -180,6 +187,7 @@ public:
 // 不支持多线程，所以A线程中的IUIAutomationElement，不能在B线程中使用。
 class CUIAutomationHelper
 {
+	friend class NotifyEventHandler;
 public:
 	CUIAutomationHelper();
 	virtual ~CUIAutomationHelper();
@@ -212,13 +220,15 @@ public:
 
 	// 注册事件，这样我们就可以收到事件了。
 	int RegisterElementStructureChangedEvent(LPCWSTR lpszAutomationId);
-	int RegisterNotifyEvent(LPCWSTR lpszAutomationId);
+	int RegisterNotifyEvent(CUIAutomationHelper *pNotify);
 
 protected:
 	// 遍历到pElement的回调。BuildTrueTreeRecursive在遍历到元素后，就会调用WalkerElement
 	int WalkerElement(IUIAutomationElement* pElement, LPARAM lParam, CUINode* pParent, CUINode* pPreviousSibling, __out CUINode** ppUINode);
 	// 遍历元素pParentElement
 	int BuildTrueTreeRecursive(IUIAutomationTreeWalker* pWalker, IUIAutomationElement* pParentElement, LPARAM lParam, CUINode* pParent, CUINode* pPreviousSibling, __out CUINode** ppNewElement);
+
+	virtual HRESULT OnNotifyHandler(IUIAutomationElement* sender, NotificationKind notificationKind, NotificationProcessing notificationProcessing, BSTR displayString, BSTR activityId);
 
 protected:
 	HWND m_hWndHost = nullptr;
