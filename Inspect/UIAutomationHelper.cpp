@@ -8,6 +8,45 @@
 #pragma comment(lib, "UIAutomationCore.lib")
 
 
+// IUIAutomationStructureChangedEventHandler methods
+HRESULT STDMETHODCALLTYPE StructureChangedEventHandler::HandleStructureChangedEvent(IUIAutomationElement* pSender, StructureChangeType changeType, SAFEARRAY* pRuntimeID)
+{
+	CUINode uiNode;
+	CUINode::GetElementProp(pSender, &uiNode);
+	
+	_eventCount++;
+	switch (changeType)
+	{
+		// 增加孩子（或子Item）
+	case StructureChangeType_ChildAdded:
+		wprintf(L">> Structure Changed: ChildAdded! (count: %d)\n", _eventCount);
+		break;
+	case StructureChangeType_ChildRemoved:
+		wprintf(L">> Structure Changed: ChildRemoved! (count: %d)\n", _eventCount);
+		break;
+	case StructureChangeType_ChildrenInvalidated:
+		wprintf(L">> Structure Changed: ChildrenInvalidated! (count: %d)\n", _eventCount);
+		break;
+	case StructureChangeType_ChildrenBulkAdded:
+		wprintf(L">> Structure Changed: ChildrenBulkAdded! (count: %d)\n", _eventCount);
+		break;
+	case StructureChangeType_ChildrenBulkRemoved:
+		wprintf(L">> Structure Changed: ChildrenBulkRemoved! (count: %d)\n", _eventCount);
+		break;
+	case StructureChangeType_ChildrenReordered:
+		wprintf(L">> Structure Changed: ChildrenReordered! (count: %d)\n", _eventCount);
+		break;
+	}
+	return S_OK;
+}
+
+
+// 收到被测试程序发送的自定义事件，被测试程序是RaiseUIAEvent.exe，点击主界面的“发送自定义UIA事件”按钮可以发送。
+HRESULT __stdcall NotifyEventHandler::HandleNotificationEvent(IUIAutomationElement* sender, NotificationKind notificationKind, NotificationProcessing notificationProcessing, BSTR displayString, BSTR activityId)
+{
+	return E_NOTIMPL;
+}
+
 class CMsgQueue
 {
 	bool IsEmpty() const
@@ -196,6 +235,20 @@ int CUIAutomationHelper::Init(HWND hWndHost)
 			break;
 		}
 
+		m_pStructureChangedHandler = new StructureChangedEventHandler();
+		if (nullptr == m_pStructureChangedHandler)
+		{
+			nRet = 1;
+			break;
+		}
+
+		m_pNotifyHandler = new NotifyEventHandler();
+		if (nullptr == m_pNotifyHandler)
+		{
+			nRet = 1;
+			break;
+		}
+
 	} while (false);
 
 	return nRet;
@@ -276,10 +329,10 @@ int CUIAutomationHelper::BuildRawTree()
 {
 	HRESULT hr = S_OK;
 	int nRet = 0;
+	IUIAutomationTreeWalker* pWalker = nullptr;
 
 	do
 	{
-		IUIAutomationTreeWalker* pWalker = nullptr;
 		hr = m_pClientUIA->get_RawViewWalker(&pWalker);
 		if (FAILED(hr))
 		{
@@ -287,41 +340,38 @@ int CUIAutomationHelper::BuildRawTree()
 			break;
 		}
 
+		m_pRootNode->Release();
+		m_pRootNode = nullptr;
+
 		CUINode* pRootElement = nullptr;
 		nRet = BuildTrueTreeRecursive(pWalker, m_pRootElement, LPARAM(this), nullptr, nullptr, &pRootElement);
 		_ASSERT(pRootElement == m_pRootNode);
+
 	} while (false);
+
+	if (nullptr != pWalker)
+	{
+		pWalker->Release();
+		pWalker = nullptr;
+	}
 
 	return nRet;
 }
 
 void CUIAutomationHelper::Release()
 {
-	std::vector<CUINode*> vElements;
-
-	CUINode* pUINode = m_pRootNode;
-	while (nullptr != pUINode)
-	{
-		vElements.push_back(pUINode);
-
-		pUINode = GetNextElement(pUINode);
-	}
-
-	for (auto& ele : vElements)
-	{
-		delete ele;
-	}
-	vElements = std::vector<CUINode*>();
-
+	m_pRootNode->Release();
 	m_pRootNode = nullptr;
 	m_hWndHost = nullptr;
 	if (nullptr != m_pRootElement)
 	{
 		m_pRootElement->Release();
+		m_pRootElement = nullptr;
 	}
 	if (nullptr != m_pClientUIA)
 	{
 		m_pClientUIA->Release();
+		m_pClientUIA = nullptr;
 	}
 }
 
@@ -332,30 +382,67 @@ int CUIAutomationHelper::ElementFromPoint(POINT pt, IUIAutomationElement** ppUIN
 
 // 由于UI上的元素有可能是动态生成和销毁的，所以我们不能使用保存的UI树来查询
 // 而应该是每次查询前实时获取一次。
-int CUIAutomationHelper::GetElement(LPCWSTR lpszElementID, IUIAutomationElement** ppUINode)
+int CUIAutomationHelper::GetUINode(LPCWSTR lpszAutomationID, CUINode** ppUINode)
 {
 	Release();
+	Init(m_hWndHost);
+	BuildRawTree();
 
-	return -1;
+	return GetCacheUINode(lpszAutomationID, ppUINode);
 }
 
 // 从已有的UI树中查询
-int CUIAutomationHelper::GetCacheElement(LPCWSTR lpszAutomationID, IUIAutomationElement** ppUINode)
+int CUIAutomationHelper::GetCacheUINode(LPCWSTR lpszAutomationID, CUINode** ppUINode)
+{
+	CUINode* pUINode = m_pRootNode;
+	while (nullptr != pUINode)
+	{
+		if (!pUINode->m_bInitProp)
+		{
+			pUINode->InitProp();
+		}
+
+		if (pUINode->m_strAutomationId == lpszAutomationID)
+		{
+			if (ppUINode != nullptr)
+			{
+				*ppUINode = pUINode;
+			}
+			break;
+		}
+
+		pUINode = CUINode::GetNextElement(pUINode);
+	}
+
+	return 0;
+}
+
+int CUIAutomationHelper::GetUINodes(LPCWSTR lpszAutomationID, std::vector<CUINode*>* pvUINodes)
+{
+	Release();
+	Init(m_hWndHost);
+	BuildRawTree();
+
+	return GetCacheUINodes(lpszAutomationID, pvUINodes);
+}
+
+int CUIAutomationHelper::GetCacheUINodes(LPCWSTR lpszAutomationID, std::vector<CUINode*>* pvUINodes)
 {
 	CUINode* pUINode = m_pRootNode;
 	while (nullptr != pUINode)
 	{
 		if (pUINode->m_strAutomationId == lpszAutomationID)
 		{
-			if (*ppUINode != nullptr)
+			if (pvUINodes != nullptr)
 			{
-				*ppUINode = pUINode->m_pBindElement;
+				pvUINodes->push_back(pUINode);
 			}
 			break;
 		}
 
-		pUINode = GetNextElement(pUINode);
+		pUINode = CUINode::GetNextElement(pUINode);
 	}
+
 	return 0;
 }
 
@@ -497,7 +584,109 @@ CUINode* CUIAutomationHelper::GetRootUINode()
 	return m_pRootNode;
 }
 
-CUINode* CUIAutomationHelper::GetNextElement(CUINode* pCurElement)
+int CUIAutomationHelper::RegisterElementStructureChangedEvent(LPCWSTR lpszAutomationId)
+{
+	int nRet = 0;
+	do
+	{
+		CUINode* pTargetNode = nullptr;
+		GetCacheUINode(lpszAutomationId, &pTargetNode);
+		if (nullptr == pTargetNode)
+		{
+			nRet = -2;
+			break;
+		}
+
+		HRESULT hr = m_pClientUIA->AddStructureChangedEventHandler(pTargetNode->m_pBindElement, TreeScope_Subtree, NULL, (IUIAutomationStructureChangedEventHandler*)m_pStructureChangedHandler);
+		if (FAILED(hr))
+		{
+			nRet = -3;
+			break;
+		}
+
+	} while(false);
+
+	return nRet;
+}
+
+int CUIAutomationHelper::RegisterNotifyEvent(LPCWSTR lpszAutomationId)
+{
+	int nRet = 0;
+	do
+	{
+		CUINode* pTargetNode = nullptr;
+		GetCacheUINode(lpszAutomationId, &pTargetNode);
+		if (nullptr == pTargetNode)
+		{
+			nRet = -2;
+			break;
+		}
+
+		IUIAutomation6 *pAutomation6 = nullptr;
+		HRESULT hr = CoCreateInstance(__uuidof(CUIAutomation8), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation6),
+			reinterpret_cast<void**>(&pAutomation6));
+
+		hr = pAutomation6->AddNotificationEventHandler(m_pRootElement, TreeScope_Subtree, NULL, (IUIAutomationNotificationEventHandler*)m_pNotifyHandler);
+		if (FAILED(hr))
+		{
+			nRet = -3;
+			break;
+		}
+
+	} while (false);
+
+	return nRet;
+}
+
+int CUINode::InitProp()
+{
+	HRESULT hr = S_OK;
+	int nRet = 0;
+
+	do
+	{
+		if (nullptr == m_pBindElement)
+		{
+			nRet = UIAE_INVALID_PARAM;
+			break;
+		}
+
+		nRet = GetElementProp(m_pBindElement, this);
+		if (0 != nRet)
+		{
+			break;
+		}
+
+		m_bInitProp = TRUE;
+
+	} while (false);
+
+	return nRet;
+}
+
+int CUINode::Release()
+{
+	std::vector<CUINode*> vElements;
+
+	CUINode* pUINode = this;
+	while (nullptr != pUINode)
+	{
+		vElements.push_back(pUINode);
+
+		pUINode = GetNextElement(pUINode);
+	}
+
+	for (auto& ele : vElements)
+	{
+		delete ele;
+	}
+	vElements = std::vector<CUINode*>();
+
+	return 0;
+}
+
+// static
+CUINode* CUINode::GetNextElement(CUINode* pCurElement)
 {
 	// 如果Item有孩子，并且Item是展开的，则返回第一个孩子
 	if (pCurElement->m_pChild != nullptr)
@@ -522,28 +711,29 @@ checkNext:
 	return nullptr;
 }
 
-int CUINode::InitProp()
+// static
+int CUINode::GetElementProp(IUIAutomationElement* pElement, __out CUINode* pNode)
 {
-	HRESULT hr = S_OK;
 	int nRet = 0;
+	HRESULT hr = S_OK;
 
 	do
 	{
-		if (nullptr == m_pBindElement)
+		if (nullptr == pElement || nullptr == pNode)
 		{
-			nRet = UIAE_INVALID_PARAM;
+			nRet = -1;
 			break;
 		}
 
 		CONTROLTYPEID eType;
-		m_pBindElement->get_CurrentControlType(&eType);
+		pElement->get_CurrentControlType(&eType);
 		if (eType == UIA_GroupControlTypeId)
 		{
 			int n = 0;
 		}
 
 		BSTR bstrAutomationId;
-		hr = m_pBindElement->get_CurrentAutomationId(&bstrAutomationId);
+		hr = pElement->get_CurrentAutomationId(&bstrAutomationId);
 		if (FAILED(hr))
 		{
 			nRet = UIAE_GET_NAME;
@@ -551,7 +741,7 @@ int CUINode::InitProp()
 		}
 
 		BSTR bstrItemType;
-		hr = m_pBindElement->get_CurrentItemType(&bstrItemType);
+		hr = pElement->get_CurrentItemType(&bstrItemType);
 		if (FAILED(hr))
 		{
 			nRet = UIAE_GET_NAME;
@@ -559,7 +749,7 @@ int CUINode::InitProp()
 		}
 
 		BSTR bstrFrameworkId;
-		hr = m_pBindElement->get_CurrentFrameworkId(&bstrFrameworkId);
+		hr = pElement->get_CurrentFrameworkId(&bstrFrameworkId);
 		if (FAILED(hr))
 		{
 			nRet = UIAE_GET_NAME;
@@ -567,7 +757,7 @@ int CUINode::InitProp()
 		}
 
 		BSTR bstrItemStatus;
-		hr = m_pBindElement->get_CurrentItemStatus(&bstrItemStatus);
+		hr = pElement->get_CurrentItemStatus(&bstrItemStatus);
 		if (FAILED(hr))
 		{
 			nRet = UIAE_GET_NAME;
@@ -575,7 +765,7 @@ int CUINode::InitProp()
 		}
 
 		BSTR bstrAriaProperties;
-		hr = m_pBindElement->get_CurrentAriaProperties(&bstrAriaProperties);
+		hr = pElement->get_CurrentAriaProperties(&bstrAriaProperties);
 		if (FAILED(hr))
 		{
 			nRet = UIAE_GET_NAME;
@@ -583,7 +773,7 @@ int CUINode::InitProp()
 		}
 
 		BSTR bstrProviderDescription;
-		hr = m_pBindElement->get_CurrentProviderDescription(&bstrProviderDescription);
+		hr = pElement->get_CurrentProviderDescription(&bstrProviderDescription);
 		if (FAILED(hr))
 		{
 			nRet = UIAE_GET_NAME;
@@ -591,7 +781,7 @@ int CUINode::InitProp()
 		}
 
 		BSTR bstrClassName;
-		hr = m_pBindElement->get_CurrentClassName(&bstrClassName);
+		hr = pElement->get_CurrentClassName(&bstrClassName);
 		if (FAILED(hr))
 		{
 			nRet = UIAE_GET_CLASS_NAME;
@@ -599,22 +789,20 @@ int CUINode::InitProp()
 		}
 
 		BSTR bstrHelpText;
-		hr = m_pBindElement->get_CurrentHelpText(&bstrHelpText);
+		hr = pElement->get_CurrentHelpText(&bstrHelpText);
 		if (FAILED(hr))
 		{
 			nRet = UIAE_GET_CLASS_NAME;
 			break;
 		}
 
-		m_strAutomationId = bstrAutomationId == nullptr ? L"" : bstrAutomationId;
-		m_ControlType = eType;
-		m_strFrameworkId = bstrFrameworkId == nullptr ? L"" : bstrFrameworkId;
-		m_strItemType = bstrItemType == nullptr ? L"" : bstrItemType;
-		m_strItemStatus = bstrItemStatus == nullptr ? L"" : bstrItemStatus;
-		m_strClassName = bstrClassName == nullptr ? L"" : bstrClassName;
-		m_strHelpText = bstrHelpText == nullptr ? L"" : bstrHelpText;
-
-		m_bInitProp = TRUE;
+		pNode->m_strAutomationId = bstrAutomationId == nullptr ? L"" : bstrAutomationId;
+		pNode->m_ControlType = eType;
+		pNode->m_strFrameworkId = bstrFrameworkId == nullptr ? L"" : bstrFrameworkId;
+		pNode->m_strItemType = bstrItemType == nullptr ? L"" : bstrItemType;
+		pNode->m_strItemStatus = bstrItemStatus == nullptr ? L"" : bstrItemStatus;
+		pNode->m_strClassName = bstrClassName == nullptr ? L"" : bstrClassName;
+		pNode->m_strHelpText = bstrHelpText == nullptr ? L"" : bstrHelpText;
 
 	} while (false);
 

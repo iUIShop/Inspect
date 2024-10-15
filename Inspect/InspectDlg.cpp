@@ -222,8 +222,11 @@ LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 		ULONGLONG dwTime1 = GetTickCount64();
 		pThis->m_UIAHelper.Release();
-		pThis->m_UIAHelper.Init(nullptr);	// Desktop
+		pThis->m_UIAHelper.Init(HWND(0xB121C));	// nullptr is Desktop
 		pThis->m_UIAHelper.BuildRawTree();
+
+		pThis->m_UIAHelper.RegisterElementStructureChangedEvent(L"home");
+		pThis->m_UIAHelper.RegisterNotifyEvent(L"");
 
 		ULONGLONG dwLoadUIATreeTime = GetTickCount64() - dwTime1;
 
@@ -249,7 +252,8 @@ LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 int CInspectDlg::BuildUITreeThread()
 {
-	CoInitialize(nullptr);
+	// 自动化事件必须初始化为多线程
+	CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
 	MSG msg;
 	while (GetMsg(&msg, OnUIAThreadMsg))

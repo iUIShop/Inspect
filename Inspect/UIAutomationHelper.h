@@ -23,10 +23,124 @@ enum UIAUTOMATION_ERROR
 	UIAE_GET_CLASS_NAME = -11,
 };
 
+// 响应UI树结构改变事件
+class StructureChangedEventHandler : public IUIAutomationStructureChangedEventHandler
+{
+private:
+	LONG _refCount;
+
+public:
+	int _eventCount;
+
+	// Constructor.
+	StructureChangedEventHandler() : _refCount(1), _eventCount(0)
+	{
+	}
+
+	// IUnknown methods.
+	ULONG STDMETHODCALLTYPE AddRef()
+	{
+		ULONG ret = InterlockedIncrement(&_refCount);
+		return ret;
+	}
+
+	ULONG STDMETHODCALLTYPE Release()
+	{
+		ULONG ret = InterlockedDecrement(&_refCount);
+		if (ret == 0)
+		{
+			delete this;
+			return 0;
+		}
+		return ret;
+	}
+
+	HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppInterface)
+	{
+		if (riid == __uuidof(IUnknown))
+			*ppInterface = static_cast<IUIAutomationStructureChangedEventHandler*>(this);
+		else if (riid == __uuidof(IUIAutomationStructureChangedEventHandler))
+			*ppInterface = static_cast<IUIAutomationStructureChangedEventHandler*>(this);
+		else
+		{
+			*ppInterface = NULL;
+			return E_NOINTERFACE;
+		}
+		this->AddRef();
+		return S_OK;
+	}
+
+	// IUIAutomationStructureChangedEventHandler methods
+	HRESULT STDMETHODCALLTYPE HandleStructureChangedEvent(IUIAutomationElement* pSender, StructureChangeType changeType, SAFEARRAY* pRuntimeID);
+};
+
+// 响应自定义事件，我们可以在自己的程序中，调用UiaRaiseNotificationEvent发送自定义事件，
+// 这样，自动化测试程序就可以收到这个事件了。
+class NotifyEventHandler : public IUIAutomationNotificationEventHandler
+{
+private:
+	LONG _refCount;
+
+public:
+	int _eventCount;
+
+	// Constructor.
+	NotifyEventHandler() : _refCount(1), _eventCount(0)
+	{
+	}
+
+	// IUnknown methods.
+	ULONG STDMETHODCALLTYPE AddRef()
+	{
+		ULONG ret = InterlockedIncrement(&_refCount);
+		return ret;
+	}
+
+	ULONG STDMETHODCALLTYPE Release()
+	{
+		ULONG ret = InterlockedDecrement(&_refCount);
+		if (ret == 0)
+		{
+			delete this;
+			return 0;
+		}
+		return ret;
+	}
+
+	HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppInterface)
+	{
+		if (riid == __uuidof(IUnknown))
+			*ppInterface = static_cast<IUIAutomationNotificationEventHandler*>(this);
+		else if (riid == __uuidof(IUIAutomationNotificationEventHandler))
+			*ppInterface = static_cast<IUIAutomationNotificationEventHandler*>(this);
+		else
+		{
+			*ppInterface = NULL;
+			return E_NOINTERFACE;
+		}
+		this->AddRef();
+		return S_OK;
+	}
+
+	// IUIAutomationStructureChangedEventHandler methods
+	virtual HRESULT STDMETHODCALLTYPE HandleNotificationEvent(
+		/* [in] */ __RPC__in_opt IUIAutomationElement* sender,
+		enum NotificationKind notificationKind,
+		enum NotificationProcessing notificationProcessing,
+		/* [in] */ __RPC__in BSTR displayString,
+		/* [in] */ __RPC__in BSTR activityId);
+};
+
 class CUINode
 {
 public:
 	int InitProp();
+	// 释放自己及所有后代
+	int Release();
+
+	// 返回指定Item下方与指定Item最靠近的可见Item(按List顺序).
+	static CUINode* GetNextElement(CUINode* pCurElement);
+	static int GetElementProp(IUIAutomationElement* pElement, __out CUINode* pNode);
 
 public:
 	CUINode* m_pParent = nullptr;
@@ -82,8 +196,11 @@ public:
 	void Release();
 
 	int ElementFromPoint(POINT pt, IUIAutomationElement** ppElement);
-	int GetElement(LPCWSTR lpszAutomationID, IUIAutomationElement** ppElement);
-	int GetCacheElement(LPCWSTR lpszAutomationID, IUIAutomationElement** ppElement);
+	int GetUINode(LPCWSTR lpszAutomationID, CUINode ** ppUINode);
+	int GetCacheUINode(LPCWSTR lpszAutomationID, CUINode** ppUINode);
+	int GetUINodes(LPCWSTR lpszAutomationID, std::vector<CUINode*> *pvUINodes);
+	int GetCacheUINodes(LPCWSTR lpszAutomationID, std::vector<CUINode*>* pvUINodes);
+
 	// lControlType: UIAutomationClient.h line:1318
 	int GetElementByControlType(long lControlType, LPCWSTR lpszText, BOOL bEqual, IUIAutomationElement** ppElement);
 	int GetElementsByControlType(long lControlType, LPCWSTR lpszText, BOOL bEqual, std::vector<IUIAutomationElement*> *pElements);
@@ -93,8 +210,9 @@ public:
 
 	CUINode* GetRootUINode();
 
-	// 返回指定Item下方与指定Item最靠近的可见Item(按List顺序).
-	CUINode* GetNextElement(CUINode* pCurElement);
+	// 注册事件，这样我们就可以收到事件了。
+	int RegisterElementStructureChangedEvent(LPCWSTR lpszAutomationId);
+	int RegisterNotifyEvent(LPCWSTR lpszAutomationId);
 
 protected:
 	// 遍历到pElement的回调。BuildTrueTreeRecursive在遍历到元素后，就会调用WalkerElement
@@ -109,6 +227,11 @@ protected:
 
 	// UI Automation元素树型结构
 	CUINode* m_pRootNode = nullptr;
+
+	// 响应UI结构变化通知
+	StructureChangedEventHandler* m_pStructureChangedHandler = nullptr;
+	// 响应自定义通知
+	NotifyEventHandler* m_pNotifyHandler = nullptr;
 };
 
 // 由于UI Automation不支持多线程，并且遍历整个桌面很慢。
