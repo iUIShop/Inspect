@@ -95,6 +95,10 @@ public:
 	NotifyEventHandler() : _refCount(1), _eventCount(0)
 	{
 	}
+	~NotifyEventHandler()
+	{
+		int n = 0;
+	}
 
 	// IUnknown methods.
 	ULONG STDMETHODCALLTYPE AddRef()
@@ -148,6 +152,7 @@ public:
 	// 返回指定Item下方与指定Item最靠近的可见Item(按List顺序).
 	static CUINode* GetNextElement(CUINode* pCurElement);
 	static int GetElementProp(IUIAutomationElement* pElement, __out CUINode* pNode);
+	static int FindUINode(CUINode* pFromUINode, BOOL bIncludeSelf, LPCWSTR lpszAutomationId, __out CUINode** pFoundUINode);
 
 public:
 	CUINode* m_pParent = nullptr;
@@ -256,3 +261,4 @@ LRESULT PostMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL GetMsg(__out LPMSG lpMsg, WNDPROC fnMsgHandler);
 
 HRESULT InvokeButton(IUIAutomationElement* pButtonElement);
+void OutputString(const WCHAR* format, ...);

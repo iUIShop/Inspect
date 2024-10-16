@@ -4,8 +4,36 @@
 #include <mutex>
 #include <UIAutomation.h>
 #include <UIAutomationClient.h>
+#include <locale>
 
 #pragma comment(lib, "UIAutomationCore.lib")
+
+void OutputString(const WCHAR* format, ...)
+{
+	std::locale::global(std::locale(""));
+
+	int nPid = GetCurrentProcessId();
+	int nTid = GetCurrentThreadId();
+
+	SYSTEMTIME timeNow;
+	GetLocalTime(&timeNow);
+
+	CStringW strArgW;
+
+	va_list	ap;
+	va_start(ap, format);
+	strArgW.FormatV(format, ap);
+	va_end(ap);
+
+	CString strInfo;
+	strInfo.Format(L"\r\n<%04d-%02d-%02d %02d:%02d:%02d:%03d>: [%d|%d]: [Automation]%s\r\n",
+		timeNow.wYear, timeNow.wMonth, timeNow.wDay,
+		timeNow.wHour, timeNow.wMinute, timeNow.wSecond, timeNow.wMilliseconds,
+		nPid, nTid,
+		(LPCWSTR)strArgW);
+
+	OutputDebugStringW(strInfo);
+}
 
 
 // IUIAutomationStructureChangedEventHandler methods
@@ -255,6 +283,7 @@ int CUIAutomationHelper::Init(HWND hWndHost)
 			nRet = 1;
 			break;
 		}
+		m_pNotifyHandler->SetUIAHelper(this);
 
 	} while (false);
 
@@ -802,6 +831,12 @@ int CUINode::GetElementProp(IUIAutomationElement* pElement, __out CUINode* pNode
 		}
 
 		pNode->m_strAutomationId = bstrAutomationId == nullptr ? L"" : bstrAutomationId;
+
+		// 删除字符串的中\。这是因为Item使用fileId来作为Automation ID，而fileId中，包含\.
+		pNode->m_strAutomationId.erase(
+			std::remove_if(pNode->m_strAutomationId.begin(), pNode->m_strAutomationId.end(), [](wchar_t c) { return c == '\\'; }),
+			pNode->m_strAutomationId.end());
+
 		pNode->m_ControlType = eType;
 		pNode->m_strFrameworkId = bstrFrameworkId == nullptr ? L"" : bstrFrameworkId;
 		pNode->m_strItemType = bstrItemType == nullptr ? L"" : bstrItemType;
@@ -812,4 +847,38 @@ int CUINode::GetElementProp(IUIAutomationElement* pElement, __out CUINode* pNode
 	} while (false);
 
 	return nRet;
+}
+
+int CUINode::FindUINode(CUINode* pFromUINode, BOOL bIncludeSelf, LPCWSTR lpszAutomationId, CUINode** pFoundUINode)
+{
+	CUINode* pCurNode = nullptr;
+	if (bIncludeSelf)
+	{
+		pCurNode = pFromUINode;
+	}
+	else
+	{
+		pCurNode = pFromUINode->m_pChild;
+	}
+
+	CStringW strAutomationId = lpszAutomationId;
+	strAutomationId.Trim();
+
+	while (nullptr != pCurNode)
+	{
+		if (!pCurNode->m_bInitProp)
+		{
+			pCurNode->InitProp();
+		}
+
+		if (strAutomationId.CompareNoCase(pCurNode->m_strAutomationId.c_str()) == 0)
+		{
+			*pFoundUINode = pCurNode;
+			break;
+		}
+
+		pCurNode = CUINode::GetNextElement(pCurNode);
+	}
+
+	return 0;
 }
