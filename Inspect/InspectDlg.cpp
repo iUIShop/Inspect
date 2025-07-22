@@ -1,4 +1,4 @@
-
+ï»¿
 // InspectDlg.cpp : implementation file
 //
 
@@ -178,7 +178,7 @@ int CInspectDlg::WalkerUITree(CUINode* pUINode,
 		return -1;
 	}
 
-	// ×ÔÒÑ
+	// è‡ªå·²
 	CStringW strItem;
 	strItem = L"\"";
 	strItem += pUINode->m_strName.c_str();
@@ -227,7 +227,7 @@ LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		pThis->m_UIAHelper.Init(hWndSharehub);	// nullptr is Desktop
 		pThis->m_UIAHelper.BuildRawTree();
 
-		pThis->m_UIAHelper.RegisterElementStructureChangedEvent(L"home");
+		pThis->m_UIAHelper.RegisterElementStructureChangedEvent(L"home", FU_BY_NAME);
 		pThis->m_UIAHelper.RegisterNotifyEvent(L"");
 
 		ULONGLONG dwLoadUIATreeTime = GetTickCount64() - dwTime1;
@@ -254,7 +254,7 @@ LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 int CInspectDlg::BuildUITreeThread()
 {
-	// ×Ô¶¯»¯ÊÂ¼ş±ØĞë³õÊ¼»¯Îª¶àÏß³Ì
+	// è‡ªåŠ¨åŒ–äº‹ä»¶å¿…é¡»åˆå§‹åŒ–ä¸ºå¤šçº¿ç¨‹
 	CoInitializeEx(NULL, COINIT_MULTITHREADED);
 
 	MSG msg;

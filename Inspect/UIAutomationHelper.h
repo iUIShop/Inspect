@@ -23,6 +23,12 @@ enum UIAUTOMATION_ERROR
 	UIAE_GET_CLASS_NAME = -11,
 };
 
+enum FIND_UINODE
+{
+	FU_BY_AUTOMATION_ID = 1,
+	FU_BY_NAME
+};
+
 // 响应UI树结构改变事件
 class StructureChangedEventHandler : public IUIAutomationStructureChangedEventHandler
 {
@@ -86,10 +92,7 @@ public:
 	int _eventCount;
 
 public:
-	void SetUIAHelper(CUIAutomationHelper* pUIAHelper)
-	{
-		m_pBindUIA = pUIAHelper;
-	}
+	void SetUIAHelper(CUIAutomationHelper* pUIAHelper);
 
 	// Constructor.
 	NotifyEventHandler() : _refCount(1), _eventCount(0)
@@ -208,9 +211,11 @@ public:
 	// 释放
 	void Release();
 
+	IUIAutomation* GetUIAutomation();
 	int ElementFromPoint(POINT pt, IUIAutomationElement** ppElement);
-	int GetUINode(LPCWSTR lpszAutomationID, CUINode ** ppUINode);
-	int GetCacheUINode(LPCWSTR lpszAutomationID, CUINode** ppUINode);
+	int GetUINode(LPCWSTR lpszAutomationID, CUINode ** ppUINode, FIND_UINODE eFindUINode);
+	int GetCacheUINode(LPCWSTR lpszFilter, CUINode** ppUINode, FIND_UINODE eFindUINode);
+	int GetCacheUINodeByName(LPCWSTR lpszName, CUINode** ppUINode);
 	int GetUINodes(LPCWSTR lpszAutomationID, std::vector<CUINode*> *pvUINodes);
 	int GetCacheUINodes(LPCWSTR lpszAutomationID, std::vector<CUINode*>* pvUINodes);
 
@@ -224,8 +229,8 @@ public:
 	CUINode* GetRootUINode();
 
 	// 注册事件，这样我们就可以收到事件了。
-	int RegisterElementStructureChangedEvent(LPCWSTR lpszAutomationId);
-	int RegisterNotifyEvent(CUIAutomationHelper *pNotify);
+	int RegisterElementStructureChangedEvent(LPCWSTR lpszAutomationId, FIND_UINODE eFindUINode);
+	int RegisterNotifyEvent();
 
 protected:
 	// 遍历到pElement的回调。BuildTrueTreeRecursive在遍历到元素后，就会调用WalkerElement
@@ -247,6 +252,10 @@ protected:
 	StructureChangedEventHandler* m_pStructureChangedHandler = nullptr;
 	// 响应自定义通知
 	NotifyEventHandler* m_pNotifyHandler = nullptr;
+
+	// 用于注册自定义通知事件的IUIAutomation6接口
+	IUIAutomation6* m_pAutomation6 = nullptr;
+
 };
 
 // 由于UI Automation不支持多线程，并且遍历整个桌面很慢。

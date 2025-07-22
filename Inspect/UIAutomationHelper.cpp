@@ -68,6 +68,10 @@ HRESULT STDMETHODCALLTYPE StructureChangedEventHandler::HandleStructureChangedEv
 	return S_OK;
 }
 
+void NotifyEventHandler::SetUIAHelper(CUIAutomationHelper* pUIAHelper)
+{
+	m_pBindUIA = pUIAHelper;
+}
 
 // 收到被测试程序发送的自定义事件，被测试程序是RaiseUIAEvent.exe，点击主界面的“发送自定义UIA事件”按钮可以发送。
 // 程序员可以调用UiaRaiseNotificationEvent发送自定义事件。
@@ -270,21 +274,6 @@ int CUIAutomationHelper::Init(HWND hWndHost)
 			break;
 		}
 
-		m_pStructureChangedHandler = new StructureChangedEventHandler();
-		if (nullptr == m_pStructureChangedHandler)
-		{
-			nRet = 1;
-			break;
-		}
-
-		m_pNotifyHandler = new NotifyEventHandler();
-		if (nullptr == m_pNotifyHandler)
-		{
-			nRet = 1;
-			break;
-		}
-		m_pNotifyHandler->SetUIAHelper(this);
-
 	} while (false);
 
 	return nRet;
@@ -374,6 +363,11 @@ int CUIAutomationHelper::BuildRawTree()
 
 	do
 	{
+		if (nullptr == m_pClientUIA)
+		{
+			nRet = -1;
+			break;
+		}
 		hr = m_pClientUIA->get_RawViewWalker(&pWalker);
 		if (FAILED(hr))
 		{
@@ -414,6 +408,29 @@ void CUIAutomationHelper::Release()
 		m_pClientUIA->Release();
 		m_pClientUIA = nullptr;
 	}
+	if (nullptr != m_pNotifyHandler && nullptr != m_pAutomation6)
+	{
+		HRESULT hr = m_pAutomation6->RemoveAllEventHandlers();
+
+		m_pNotifyHandler->SetUIAHelper(nullptr);
+		m_pNotifyHandler->Release();
+		m_pNotifyHandler = nullptr;
+	}
+	if (nullptr != m_pAutomation6)
+	{
+		m_pAutomation6->Release();
+		m_pAutomation6 = nullptr;
+	}
+	if (nullptr != m_pStructureChangedHandler)
+	{
+		m_pStructureChangedHandler->Release();
+		m_pStructureChangedHandler = nullptr;
+	}
+}
+
+IUIAutomation* CUIAutomationHelper::GetUIAutomation()
+{
+	return m_pClientUIA;
 }
 
 int CUIAutomationHelper::ElementFromPoint(POINT pt, IUIAutomationElement** ppUINode)
@@ -423,17 +440,17 @@ int CUIAutomationHelper::ElementFromPoint(POINT pt, IUIAutomationElement** ppUIN
 
 // 由于UI上的元素有可能是动态生成和销毁的，所以我们不能使用保存的UI树来查询
 // 而应该是每次查询前实时获取一次。
-int CUIAutomationHelper::GetUINode(LPCWSTR lpszAutomationID, CUINode** ppUINode)
+int CUIAutomationHelper::GetUINode(LPCWSTR lpszAutomationID, CUINode** ppUINode, FIND_UINODE eFindUINode)
 {
 	Release();
 	Init(m_hWndHost);
 	BuildRawTree();
 
-	return GetCacheUINode(lpszAutomationID, ppUINode);
+	return GetCacheUINode(lpszAutomationID, ppUINode, eFindUINode);
 }
 
 // 从已有的UI树中查询
-int CUIAutomationHelper::GetCacheUINode(LPCWSTR lpszAutomationID, CUINode** ppUINode)
+int CUIAutomationHelper::GetCacheUINode(LPCWSTR lpszFilter, CUINode** ppUINode, FIND_UINODE eFindUINode)
 {
 	CUINode* pUINode = m_pRootNode;
 	while (nullptr != pUINode)
@@ -443,7 +460,46 @@ int CUIAutomationHelper::GetCacheUINode(LPCWSTR lpszAutomationID, CUINode** ppUI
 			pUINode->InitProp();
 		}
 
-		if (pUINode->m_strAutomationId == lpszAutomationID)
+		std::wstring strFind;
+		if (FU_BY_AUTOMATION_ID == eFindUINode)
+		{
+			strFind = pUINode->m_strAutomationId;
+		}
+		else if (FU_BY_NAME == eFindUINode)
+		{
+			strFind = pUINode->m_strName;
+		}
+		else
+		{
+			_ASSERT(FALSE);
+		}
+
+		if (strFind == lpszFilter)
+		{
+			if (ppUINode != nullptr)
+			{
+				*ppUINode = pUINode;
+			}
+			break;
+		}
+
+		pUINode = CUINode::GetNextElement(pUINode);
+	}
+
+	return 0;
+}
+
+int CUIAutomationHelper::GetCacheUINodeByName(LPCWSTR lpszName, CUINode** ppUINode)
+{
+	CUINode* pUINode = m_pRootNode;
+	while (nullptr != pUINode)
+	{
+		if (!pUINode->m_bInitProp)
+		{
+			pUINode->InitProp();
+		}
+
+		if (pUINode->m_strName == lpszName)
 		{
 			if (ppUINode != nullptr)
 			{
@@ -534,6 +590,12 @@ int CUIAutomationHelper::CreateElementProp(IUIAutomationElement* pElement, CUINo
 		(*ppUINode)->m_strName = bstrName == nullptr ? L"" : bstrName;
 		(*ppUINode)->m_strLocalizedControlType = bstrLocalizedControlType == nullptr ? L"" : bstrLocalizedControlType;
 
+		//if ((*ppUINode)->m_strName == L"IDC_BTN_MINIMIZE")
+		//{
+		//	InvokeButton(pElement);
+		//}
+
+		// 延时加载下面的属性
 		if (0)
 		{
 			CONTROLTYPEID eType;
@@ -625,20 +687,27 @@ CUINode* CUIAutomationHelper::GetRootUINode()
 	return m_pRootNode;
 }
 
-int CUIAutomationHelper::RegisterElementStructureChangedEvent(LPCWSTR lpszAutomationId)
+int CUIAutomationHelper::RegisterElementStructureChangedEvent(LPCWSTR lpszAutomationId, FIND_UINODE eFindUINode)
 {
 	int nRet = 0;
 	do
 	{
 		CUINode* pTargetNode = nullptr;
-		GetCacheUINode(lpszAutomationId, &pTargetNode);
+		GetCacheUINode(lpszAutomationId, &pTargetNode, eFindUINode);
 		if (nullptr == pTargetNode)
 		{
 			nRet = -2;
 			break;
 		}
 
-		HRESULT hr = m_pClientUIA->AddStructureChangedEventHandler(pTargetNode->m_pBindElement, TreeScope_Subtree, NULL, (IUIAutomationStructureChangedEventHandler*)m_pStructureChangedHandler);
+		m_pStructureChangedHandler = new StructureChangedEventHandler();
+		if (nullptr == m_pStructureChangedHandler)
+		{
+			nRet = 1;
+			break;
+		}
+
+		HRESULT hr = m_pClientUIA->AddStructureChangedEventHandler(pTargetNode->m_pBindElement, TreeScope_Subtree, NULL, m_pStructureChangedHandler);
 		if (FAILED(hr))
 		{
 			nRet = -3;
@@ -650,17 +719,28 @@ int CUIAutomationHelper::RegisterElementStructureChangedEvent(LPCWSTR lpszAutoma
 	return nRet;
 }
 
-int CUIAutomationHelper::RegisterNotifyEvent(CUIAutomationHelper* pNotify)
+int CUIAutomationHelper::RegisterNotifyEvent()
 {
 	int nRet = 0;
 	do
 	{
-		IUIAutomation6 *pAutomation6 = nullptr;
 		HRESULT hr = CoCreateInstance(__uuidof(CUIAutomation8), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation6),
-			reinterpret_cast<void**>(&pAutomation6));
+			reinterpret_cast<void**>(&m_pAutomation6));
+		if (FAILED(hr) || nullptr  == m_pAutomation6)
+		{
+			nRet = -2;
+			break;
+		}
 
-		m_pNotifyHandler->SetUIAHelper(pNotify);
-		hr = pAutomation6->AddNotificationEventHandler(m_pRootElement, TreeScope_Subtree, NULL, (IUIAutomationNotificationEventHandler*)m_pNotifyHandler);
+		m_pNotifyHandler = new NotifyEventHandler();
+		if (nullptr == m_pNotifyHandler)
+		{
+			nRet = 1;
+			break;
+		}
+
+		m_pNotifyHandler->SetUIAHelper(this);
+		hr = m_pAutomation6->AddNotificationEventHandler(m_pRootElement, TreeScope_Subtree, NULL, m_pNotifyHandler);
 		if (FAILED(hr))
 		{
 			nRet = -3;
