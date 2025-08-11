@@ -78,6 +78,10 @@ void NotifyEventHandler::SetUIAHelper(CUIAutomationHelper* pUIAHelper)
 HRESULT __stdcall NotifyEventHandler::HandleNotificationEvent(IUIAutomationElement* pSender,
 	NotificationKind notificationKind, NotificationProcessing notificationProcessing, BSTR displayString, BSTR activityId)
 {
+	CStringW strInfo;
+	strInfo.Format(L"[UIA] receive notify: '%s', activityId: '%s'.", displayString, activityId);
+	OutputDebugStringW(strInfo);
+
 	if (nullptr != m_pBindUIA)
 	{
 		return m_pBindUIA->OnNotifyHandler(pSender, notificationKind, notificationProcessing, displayString, activityId);
