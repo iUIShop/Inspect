@@ -184,7 +184,7 @@ public:
 
 	HRESULT STDMETHODCALLTYPE QueryInterface(_In_ REFIID riid, _Outptr_ void** ppInterface) final
 	{
-		if (ppInterface)
+		if (nullptr == ppInterface)
 		{
 			return E_INVALIDARG;
 		}
@@ -262,7 +262,31 @@ private:
 
 void CRaiseUIAEventDlg::OnBnClickedBtnRaiseCustomUiaEvent()
 {
-	UiaProvider *pu = new UiaProvider(m_hWnd);
-	HRESULT hr = UiaRaiseNotificationEvent(pu, NotificationKind_ActionCompleted, NotificationProcessing_ImportantAll, CComBSTR("lsw is a boy"), CComBSTR("123321"));
+	HRESULT hr = S_FALSE;
+	if (0)
+	{
+		// 这种方法发送的事件，外部可以收到。
+		CComPtr<UiaProvider> spProvider = new UiaProvider(m_hWnd); // auto call spProvider->Release();
+		hr = UiaRaiseNotificationEvent(spProvider, NotificationKind_ActionCompleted, NotificationProcessing_ImportantAll, CComBSTR(L"lsw is a boy"), CComBSTR(L"123321"));
+	}
+	else
+	{
+		CComPtr<IRawElementProviderSimple> spProvider;
+		hr = UiaHostProviderFromHwnd(m_hWnd, &spProvider);	// 使用这个得到的IRawElementProviderSimple，似乎外部无法收到事件。
+		if (FAILED(hr) || spProvider == nullptr)
+		{
+			return;
+		}
+		VARIANT varDesc;
+		VariantInit(&varDesc);
+		hr = spProvider->GetPropertyValue(UIA_ProviderDescriptionPropertyId, &varDesc);
+		// 即使获取失败也不一定要阻止发事件，但这有助于调试
+		if (SUCCEEDED(hr) && varDesc.vt == VT_BSTR) {
+			// OutputDebugString(varDesc.bstrVal); 
+		}
+		VariantClear(&varDesc);
+		hr = UiaRaiseNotificationEvent(spProvider, NotificationKind_ActionCompleted, NotificationProcessing_ImportantAll, CComBSTR(L"lsw is a boy"), CComBSTR(L"123321"));
+	}
+
 	int n = 0;
 }

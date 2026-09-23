@@ -8,33 +8,6 @@
 
 #pragma comment(lib, "UIAutomationCore.lib")
 
-void OutputString(const WCHAR* format, ...)
-{
-	std::locale::global(std::locale(""));
-
-	int nPid = GetCurrentProcessId();
-	int nTid = GetCurrentThreadId();
-
-	SYSTEMTIME timeNow;
-	GetLocalTime(&timeNow);
-
-	CStringW strArgW;
-
-	va_list	ap;
-	va_start(ap, format);
-	strArgW.FormatV(format, ap);
-	va_end(ap);
-
-	CString strInfo;
-	strInfo.Format(L"\r\n<%04d-%02d-%02d %02d:%02d:%02d:%03d>: [%d|%d]: [Automation]%s\r\n",
-		timeNow.wYear, timeNow.wMonth, timeNow.wDay,
-		timeNow.wHour, timeNow.wMinute, timeNow.wSecond, timeNow.wMilliseconds,
-		nPid, nTid,
-		(LPCWSTR)strArgW);
-
-	OutputDebugStringW(strInfo);
-}
-
 
 // IUIAutomationStructureChangedEventHandler methods
 HRESULT STDMETHODCALLTYPE StructureChangedEventHandler::HandleStructureChangedEvent(IUIAutomationElement* pSender, StructureChangeType changeType, SAFEARRAY* pRuntimeID)
@@ -84,6 +57,8 @@ HRESULT __stdcall NotifyEventHandler::HandleNotificationEvent(IUIAutomationEleme
 
 	if (nullptr != m_pBindUIA)
 	{
+		IUIAutomationElement* p = nullptr;
+		pSender->GetCachedParent(&p);
 		return m_pBindUIA->OnNotifyHandler(pSender, notificationKind, notificationProcessing, displayString, activityId);
 	}
 
@@ -479,6 +454,45 @@ int CUIAutomationHelper::GetCacheUINode(LPCWSTR lpszFilter, CUINode** ppUINode, 
 		}
 
 		if (strFind == lpszFilter)
+		{
+			if (ppUINode != nullptr)
+			{
+				*ppUINode = pUINode;
+			}
+			break;
+		}
+
+		pUINode = CUINode::GetNextElement(pUINode);
+	}
+
+	return 0;
+}
+
+int CUIAutomationHelper::GetCacheUINodeByPartMatch(LPCWSTR lpszFilter, CUINode** ppUINode, FIND_UINODE eFindUINode)
+{
+	CUINode* pUINode = m_pRootNode;
+	while (nullptr != pUINode)
+	{
+		if (!pUINode->m_bInitProp)
+		{
+			pUINode->InitProp();
+		}
+
+		CStringW strFind;
+		if (FU_BY_AUTOMATION_ID == eFindUINode)
+		{
+			strFind = pUINode->m_strAutomationId.c_str();
+		}
+		else if (FU_BY_NAME == eFindUINode)
+		{
+			strFind = pUINode->m_strName.c_str();
+		}
+		else
+		{
+			_ASSERT(FALSE);
+		}
+
+		if (strFind.Find(lpszFilter) >= 0)
 		{
 			if (ppUINode != nullptr)
 			{

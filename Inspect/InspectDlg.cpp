@@ -209,6 +209,37 @@ int CInspectDlg::WalkerUITree(CUINode* pUINode,
 	return 0;
 }
 
+static void ExpandTreeRecursive(HWND hWndTree, HTREEITEM hItem)
+{
+	if (hItem == NULL) return;
+
+	// 1. 展开当前节点
+	SendMessage(hWndTree, TVM_EXPAND, TVE_EXPAND, (LPARAM)hItem);
+
+	// 2. 获取当前节点的第一个子节点，并递归展开
+	HTREEITEM hChild = (HTREEITEM)SendMessage(hWndTree, TVM_GETNEXTITEM, TVGN_CHILD, (LPARAM)hItem);
+	ExpandTreeRecursive(hWndTree, hChild);
+
+	// 3. 获取当前节点的下一个兄弟节点，并递归展开
+	HTREEITEM hSibling = (HTREEITEM)SendMessage(hWndTree, TVM_GETNEXTITEM, TVGN_NEXT, (LPARAM)hItem);
+	ExpandTreeRecursive(hWndTree, hSibling);
+}
+
+/**
+ * 展开 TreeView 控件的所有节点（纯 Win32 API 递归版）
+ * @param hWndTree TreeView 控件的窗口句柄
+ */
+void ExpandAllTreeItems(HWND hWndTree)
+{
+	if (!IsWindow(hWndTree)) return;
+
+	// 获取树的根节点
+	HTREEITEM hRoot = (HTREEITEM)SendMessage(hWndTree, TVM_GETNEXTITEM, TVGN_ROOT, 0);
+
+	// 从根节点开始递归展开
+	ExpandTreeRecursive(hWndTree, hRoot);
+}
+
 LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	if (UIA_BUILD_UIA == uMsg)
@@ -217,7 +248,7 @@ LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		CWnd* pButton = pThis->GetDlgItem(IDC_BTN_BUILD_UI_TREE);
 
 		HWND hWndTarget = ::FindWindowW(L"#32770", L"RaiseUIAEvent");
-		HWND hWndSharehub = ::FindWindowW(L"Sharehub", L"Sharehub");
+		HWND hWndSharehub = ::FindWindowW(L"Sharehub", L"Vault-Plugin");
 		pButton->EnableWindow(FALSE);
 		pThis->m_treUIA.DeleteAllItems();
 		pThis->m_lstElementProp.DeleteAllItems();
@@ -228,7 +259,7 @@ LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		pThis->m_UIAHelper.BuildRawTree();
 
 		pThis->m_UIAHelper.RegisterElementStructureChangedEvent(L"home", FU_BY_NAME);
-		pThis->m_UIAHelper.RegisterNotifyEvent(L"");
+		pThis->m_UIAHelper.RegisterNotifyEvent();
 
 		ULONGLONG dwLoadUIATreeTime = GetTickCount64() - dwTime1;
 
@@ -236,8 +267,8 @@ LRESULT OnUIAThreadMsg(HWND, UINT uMsg, WPARAM wParam, LPARAM lParam)
 		CUINode* pRootElement = pThis->m_UIAHelper.GetRootUINode();
 		HTREEITEM hItem = nullptr;
 		pThis->WalkerUITree(pRootElement, nullptr, nullptr, &hItem);
-		pThis->m_treUIA.Expand(hItem, TVE_EXPAND);
-//		pThis->m_treUIA.SelectItem(hItem);
+
+		ExpandAllTreeItems(pThis->m_treUIA.GetSafeHwnd());
 		ULONGLONG dwInsertTreeControlTime = GetTickCount64() - dwTime2;
 
 		pButton->EnableWindow(TRUE);

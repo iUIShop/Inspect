@@ -214,7 +214,10 @@ public:
 	IUIAutomation* GetUIAutomation();
 	int ElementFromPoint(POINT pt, IUIAutomationElement** ppElement);
 	int GetUINode(LPCWSTR lpszAutomationID, CUINode ** ppUINode, FIND_UINODE eFindUINode);
+	// 精确匹配
 	int GetCacheUINode(LPCWSTR lpszFilter, CUINode** ppUINode, FIND_UINODE eFindUINode);
+	// 部分匹配
+	int GetCacheUINodeByPartMatch(LPCWSTR lpszFilter, CUINode** ppUINode, FIND_UINODE eFindUINode);
 	int GetCacheUINodeByName(LPCWSTR lpszName, CUINode** ppUINode);
 	int GetUINodes(LPCWSTR lpszAutomationID, std::vector<CUINode*> *pvUINodes);
 	int GetCacheUINodes(LPCWSTR lpszAutomationID, std::vector<CUINode*>* pvUINodes);
@@ -270,4 +273,3 @@ LRESULT PostMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);
 BOOL GetMsg(__out LPMSG lpMsg, WNDPROC fnMsgHandler);
 
 HRESULT InvokeButton(IUIAutomationElement* pButtonElement);
-void OutputString(const WCHAR* format, ...);
